@@ -1,0 +1,11 @@
+{
+  "tag": "mousse_irigaray",
+  "source_seq_idx": 128508,
+  "source_name": "moussemagazine",
+  "source_id_original": 5,
+  "seq_len": 512,
+  "tokens_sha256": "bae407e959a7240a803f235fb3800a3b5d9d8a5c1fb3164dc619fb3780e7915b",
+  "lemmas_sha256": "51d23d52484e47c007c5d517e4f18189d383a21bbbaf17a9144a0ac9ab02962f",
+  "corpus_path": "web/corpus_curation/seeds/corpus_demo_mousse_irigaray.bin",
+  "words_path": "web/corpus_curation/seeds/corpus_words_demo_mousse_irigaray.bin"
+}

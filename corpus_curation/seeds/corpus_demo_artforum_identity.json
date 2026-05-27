@@ -1,0 +1,11 @@
+{
+  "tag": "artforum_identity",
+  "source_seq_idx": 38439,
+  "source_name": "artforum",
+  "source_id_original": 2,
+  "seq_len": 512,
+  "tokens_sha256": "9c857ab3b80427e42efa26ac31330887ee79b9f19188c90a5a3db4bb1d571a29",
+  "lemmas_sha256": "694c57248d19ee82141aff6c839bceeb4046368d212215943222e570d7e9620e",
+  "corpus_path": "web/corpus_curation/seeds/corpus_demo_artforum_identity.bin",
+  "words_path": "web/corpus_curation/seeds/corpus_words_demo_artforum_identity.bin"
+}

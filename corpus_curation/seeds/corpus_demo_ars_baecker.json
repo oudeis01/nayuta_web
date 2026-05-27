@@ -1,0 +1,11 @@
+{
+  "tag": "ars_baecker",
+  "source_seq_idx": 9535,
+  "source_name": "ars_electronica",
+  "source_id_original": 1,
+  "seq_len": 512,
+  "tokens_sha256": "61c7389010acb75a3733ac2755c0aa87308d2072f8993bf98331b4395f572de4",
+  "lemmas_sha256": "c0a660183d4d1162b91a4519fbec478a786d20b286b0c512112329db8db3a6c7",
+  "corpus_path": "web/corpus_curation/seeds/corpus_demo_ars_baecker.bin",
+  "words_path": "web/corpus_curation/seeds/corpus_words_demo_ars_baecker.bin"
+}

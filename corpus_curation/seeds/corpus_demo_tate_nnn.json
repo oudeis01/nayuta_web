@@ -1,0 +1,11 @@
+{
+  "tag": "tate_nnn",
+  "source_seq_idx": 156743,
+  "source_name": "tate",
+  "source_id_original": 9,
+  "seq_len": 512,
+  "tokens_sha256": "e6ac9f4e07c3d9c6c08d6b7d090abd585d910ae299cfe5ea4bf36fac2a37104a",
+  "lemmas_sha256": "a7c7e5cc06d8fca35e10c5d5d2522baece25fcf8550986a27b95faccfaa279d2",
+  "corpus_path": "web/corpus_curation/seeds/corpus_demo_tate_nnn.bin",
+  "words_path": "web/corpus_curation/seeds/corpus_words_demo_tate_nnn.bin"
+}

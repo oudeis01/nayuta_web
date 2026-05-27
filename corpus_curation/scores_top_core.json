@@ -1,0 +1,679 @@
+{
+  "mode": "core-only",
+  "weights": {
+    "core_theoretical_keywords": 1
+  },
+  "n_seqs_considered": 168804,
+  "n_seqs_skipped_short": 166070,
+  "n_seqs_with_score": 2473,
+  "n_target_lemmas": 175,
+  "resolution_report": {
+    "ecology": {
+      "core_theoretical_keywords": {
+        "weight": 1,
+        "n_keywords_total": 19,
+        "n_keywords_with_any_lid": 15,
+        "unresolved_samples": [
+          {
+            "keyword": "eco-feminism",
+            "unresolved": [
+              "eco-feminism"
+            ]
+          },
+          {
+            "keyword": "rewilding",
+            "unresolved": [
+              "rewilding->rewilde"
+            ]
+          },
+          {
+            "keyword": "more-than-human",
+            "unresolved": [
+              "more-than-human"
+            ]
+          },
+          {
+            "keyword": "multispecies",
+            "unresolved": [
+              "multispecies->multispecie"
+            ]
+          }
+        ],
+        "n_unresolved": 4
+      }
+    },
+    "gender": {
+      "core_theoretical_keywords": {
+        "weight": 1,
+        "n_keywords_total": 29,
+        "n_keywords_with_any_lid": 23,
+        "unresolved_samples": [
+          {
+            "keyword": "cis",
+            "unresolved": [
+              "cis->cis"
+            ]
+          },
+          {
+            "keyword": "transfeminism",
+            "unresolved": [
+              "transfeminism"
+            ]
+          },
+          {
+            "keyword": "trans-feminism",
+            "unresolved": [
+              "trans-feminism"
+            ]
+          },
+          {
+            "keyword": "womanism",
+            "unresolved": [
+              "womanism"
+            ]
+          },
+          {
+            "keyword": "misogynoir",
+            "unresolved": [
+              "misogynoir"
+            ]
+          },
+          {
+            "keyword": "transmisogyny",
+            "unresolved": [
+              "transmisogyny"
+            ]
+          },
+          {
+            "keyword": "third wave feminism",
+            "unresolved": [
+              "third"
+            ]
+          }
+        ],
+        "n_unresolved": 7
+      }
+    },
+    "postcolonial": {
+      "core_theoretical_keywords": {
+        "weight": 1,
+        "n_keywords_total": 27,
+        "n_keywords_with_any_lid": 22,
+        "unresolved_samples": [
+          {
+            "keyword": "post-colonial",
+            "unresolved": [
+              "post-colonial"
+            ]
+          },
+          {
+            "keyword": "occidentalism",
+            "unresolved": [
+              "occidentalism"
+            ]
+          },
+          {
+            "keyword": "coloniality of power",
+            "unresolved": [
+              "of"
+            ]
+          },
+          {
+            "keyword": "coloniality of being",
+            "unresolved": [
+              "of",
+              "being"
+            ]
+          },
+          {
+            "keyword": "neo-colonialism",
+            "unresolved": [
+              "neo-colonialism"
+            ]
+          },
+          {
+            "keyword": "world-systems theory",
+            "unresolved": [
+              "world-systems"
+            ]
+          },
+          {
+            "keyword": "center-periphery",
+            "unresolved": [
+              "center-periphery"
+            ]
+          },
+          {
+            "keyword": "anti-colonial",
+            "unresolved": [
+              "anti-colonial"
+            ]
+          }
+        ],
+        "n_unresolved": 8
+      }
+    },
+    "race": {
+      "core_theoretical_keywords": {
+        "weight": 1,
+        "n_keywords_total": 13,
+        "n_keywords_with_any_lid": 13,
+        "unresolved_samples": [],
+        "n_unresolved": 0
+      }
+    },
+    "capitalism": {
+      "core_theoretical_keywords": {
+        "weight": 1,
+        "n_keywords_total": 26,
+        "n_keywords_with_any_lid": 22,
+        "unresolved_samples": [
+          {
+            "keyword": "anti-capitalism",
+            "unresolved": [
+              "anti-capitalism"
+            ]
+          },
+          {
+            "keyword": "anticapitalism",
+            "unresolved": [
+              "anticapitalism"
+            ]
+          },
+          {
+            "keyword": "post-capitalism",
+            "unresolved": [
+              "post-capitalism"
+            ]
+          },
+          {
+            "keyword": "commoning",
+            "unresolved": [
+              "commoning->commone"
+            ]
+          }
+        ],
+        "n_unresolved": 4
+      }
+    },
+    "technology": {
+      "core_theoretical_keywords": {
+        "weight": 1,
+        "n_keywords_total": 27,
+        "n_keywords_with_any_lid": 23,
+        "unresolved_samples": [
+          {
+            "keyword": "ai",
+            "unresolved": [
+              "ai"
+            ]
+          },
+          {
+            "keyword": "nft",
+            "unresolved": [
+              "nft->nft"
+            ]
+          },
+          {
+            "keyword": "non-fungible token",
+            "unresolved": [
+              "non-fungible"
+            ]
+          },
+          {
+            "keyword": "techno-optimism",
+            "unresolved": [
+              "techno-optimism"
+            ]
+          },
+          {
+            "keyword": "techno-pessimism",
+            "unresolved": [
+              "techno-pessimism"
+            ]
+          }
+        ],
+        "n_unresolved": 5
+      }
+    },
+    "identity": {
+      "core_theoretical_keywords": {
+        "weight": 1,
+        "n_keywords_total": 15,
+        "n_keywords_with_any_lid": 15,
+        "unresolved_samples": [],
+        "n_unresolved": 0
+      }
+    },
+    "power": {
+      "core_theoretical_keywords": {
+        "weight": 1,
+        "n_keywords_total": 24,
+        "n_keywords_with_any_lid": 19,
+        "unresolved_samples": [
+          {
+            "keyword": "biopolitics",
+            "unresolved": [
+              "biopolitics->biopolitic"
+            ]
+          },
+          {
+            "keyword": "necropolitics",
+            "unresolved": [
+              "necropolitics->necropolitic"
+            ]
+          },
+          {
+            "keyword": "necropower",
+            "unresolved": [
+              "necropower"
+            ]
+          },
+          {
+            "keyword": "state of exception",
+            "unresolved": [
+              "of"
+            ]
+          },
+          {
+            "keyword": "homo sacer",
+            "unresolved": [
+              "sacer->sacer"
+            ]
+          },
+          {
+            "keyword": "counter-hegemony",
+            "unresolved": [
+              "counter-hegemony"
+            ]
+          },
+          {
+            "keyword": "counter-hegemonic",
+            "unresolved": [
+              "counter-hegemonic"
+            ]
+          }
+        ],
+        "n_unresolved": 7
+      }
+    }
+  },
+  "top": [
+    {
+      "seq_idx": 156743,
+      "source_id": 9,
+      "source_name": "tate",
+      "seq_len": 512,
+      "score": 46,
+      "n_hits": 46,
+      "score_density": 0.0898,
+      "per_discourse_hits": {
+        "gender": 32,
+        "power": 1,
+        "identity": 4,
+        "race": 6,
+        "technology": 1,
+        "postcolonial": 2
+      },
+      "leading_text": "the latter part of the work ’ s title, nnn ( no naked niggahs ), while recalling the signage of segregation and those other letters",
+      "full_text": "the latter part of the work ’ s title, nnn ( no naked niggahs ), while recalling the signage of segregation and those other letters in triplicate, the designation ‘ kkk ’, alludes to the threatening spectre of black masculinity as it was constructed in the 1970s and still is today. through media and print outlets the hyper - sexualised or criminalised black male body remained a continual subject in popular culture, and jules ’ s nudity heightens the construction of black masculinity understood as a physical threat. this historical moment did, however, figure a new kind of visibility for the black male body, a reappraisal that revolved around new kinds of self - presentation that signified racial alterity, confidence and self - possession. 5debates about black masculinity – bringing together concerns about race and sexuality – were sites of tension among black american communities, and also reflected larger questions about black equality, inclusion and autonomy. as the civil rights era of the 1950s and 1960s gave rise to the pluralism and social revolutions of the 1970s, renewed attention was paid to forms of black radicalism. the black power movement emerged as a challenge to what many leaders in the black community felt were the conciliatory attitudes of organisations such as the national association for the advancement of colored people, seen as being mostly beneficial for an integrationist black middle class. 6leaders of the black power movement and groups like the black panthers, in opposing what they perceived to be the integrationist rhetoric of an earlier civil rights generation and the expectations of white america, often embodied and displayed ‘ an aggressively heterosexual masculine persona as a way of waging psychological warfare against their white male oppressors ’, as sociologist michael messner notes. 7as curator thelma golden argues, these individuals created ‘ codifiable images of black masculinity – big afros, black leather jackets, dark sunglasses and guns ’, amplifying popular constructions and stereotypes of the idea of ‘ black macho ’ to reanimate and recoup them as radical signs of blackness and autonomy. 8as feminist scholars have shown, in responding to the racist and economic abuses of white supremacy these discourses of black liberation ‘ equated black freedom with a reassertion of black patriarchy ’, as kimberley springer describes it. 9this involved maintaining black women in subordinate roles, despite the centrality of black women activists to these movements and their challenges to common conceptions of gender, identity and freedom."
+    },
+    {
+      "seq_idx": 128508,
+      "source_id": 5,
+      "source_name": "moussemagazine",
+      "seq_len": 512,
+      "score": 40,
+      "n_hits": 40,
+      "score_density": 0.0781,
+      "per_discourse_hits": {
+        "gender": 21,
+        "technology": 1,
+        "power": 1,
+        "postcolonial": 7,
+        "race": 6,
+        "ecology": 1,
+        "identity": 9
+      },
+      "leading_text": "sexual difference feminism is based on analysis by luce irigaray and others of the history of western philosophy, which finds that the erasure of difference from",
+      "full_text": "sexual difference feminism is based on analysis by luce irigaray and others of the history of western philosophy, which finds that the erasure of difference from its fundamental modes of thought means that our whole culture and language is already coded masculine, and thus the “ neutral ” is always already male. my project is an attempt to redress this disconnection in a bid to develop and retrieve modes of intergenerational solidarity and to form transgenerational connections, forging continuities between second - wave feminism and contemporary feminist activism. currently, some important work being done in feminist philosophy forms a potential bridge between these estranged feminist cultures and generations. some have called it “ posthumanism, ” and others “ feminist new materialism, ” although that title is subject to healthy criticism from some whose work is included under that umbrella. [ 2 ] a definition of this thread of feminist theory could be as lengthy as its history. for brevity, i characterize it here as theory that uses discourses from the sciences together with the humanities to extrapolate political theories of difference. it involves writing new theories of materiality, embodiment, and subjectivity in such a way as to overcome the binary opposition of nature and culture embedded in western habits of thought and knowledge production. these theorists, like for example karen barad, rosi braidotti, elizabeth grosz, and vicki kirby, are gaining interest and influence due to the “ bridging discourses ” they produce, making it possible to move beyond some of the more stalemated essentialism / anti - essentialism debates that have defined feminist, queer, and postcolonial theory in the last decades. particularly in north american queer and feminist theory, “ essentialism ” became the target of social constructivist critiques, intensifying in the 1990s ( particularly around the reception of judith butler ’ s book gender trouble ) into a widespread project to debunk any assumptions of necessarily fixed, or “ essentialist, ” relationships between sex ( bodies ) and gender ( social roles ). this discourse often proved incompatible with the embodied approach of continental feminist philosophy, which approaches sex and gender as one entanglement, exemplified by luce irigaray ’ s philosophy. although continental feminist philosophy was often dismissed in the 1990s as “ essentialist, ” this is currently being redressed by feminist new materialists / post - humanists. they do this through analysis of the role that certain received scientific concepts of nature have played in “ anti - essentialist ” methodologies."
+    },
+    {
+      "seq_idx": 96622,
+      "source_id": 4,
+      "source_name": "e-flux",
+      "seq_len": 512,
+      "score": 35,
+      "n_hits": 35,
+      "score_density": 0.0684,
+      "per_discourse_hits": {
+        "identity": 7,
+        "ecology": 16,
+        "race": 3,
+        "power": 5,
+        "gender": 2,
+        "technology": 2,
+        "postcolonial": 4
+      },
+      "leading_text": "master of advanced studies in urban and territorial design eth zurichd - arch lus and epflenac hrc joint master programme this one - year",
+      "full_text": "master of advanced studies in urban and territorial design eth zurichd - arch lus and epflenac hrc joint master programme this one - year, full - time postgraduate programme is receiving it ’ s fifth cohort of participants in autumn 2025. it is taught in english and held at the two top swiss schools, epfl ( autumn ) and eth zurich ( spring ). the participants receive a 60 ects joint degree, the “ mas eth epfl utd i. ” the territorial project for social and ecological change urban and territorial design lies at the core of complex spatial questions and increasing urgencies. from drivers of progress to the source of planetary hazards, the impacts of cities and urbanisation processes are being recast in the public sphere. the critical examination of anthropocentric world views, the greening of politics and economies, growing social polarisation and uneven development, protest movements, and climate activism are reflected in urban and territorial space, highlighting power asymmetries and the urgent need for alternatives. the future of the urban engages social and environmental imaginaries, which now extend beyond - the - city and beyond - the - human. rather than an object, we understand territory as a subject in dialogue with other subjects, and space as an agent of socioecological change. the mas programme embraces such a transition as a field of critical and imaginative investigation based on the principles of social and environmental equity and justice. engaging with notions of transformation, reuse, circularity, regeneration, reparation, and transition of habitats and ecologies, the mas deploys theurban and territorial projectas a means to explore common epistemic horizons and new biopolitical paradigms, and as a crucial field of knowledge production across scales. the joint master of advanced studies at the eth zurich and epfl builds an innovative urban and territorial design education addressing social and environmental challenges both within the city - territory and across wider landscapes. design and research studios form the core of the programme, where design is explored as a tool for synthesis within inter - and transdisciplinary exchange involving science, practice and governance. the extended scope of urban design teaching includes both emerging developments in urban theory and a deeper understanding of the cultural and ecological dimensions of territories. scientific research on planetary urbanisation, postcolonial thought, and the anthropocene will be engaged in relation to urban design, landscape architecture, urban and agricultural ecology, systems thinking, sustainable construction, renewable energy, and low - carbon mobility."
+    },
+    {
+      "seq_idx": 6161,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 34,
+      "n_hits": 34,
+      "score_density": 0.0664,
+      "per_discourse_hits": {
+        "ecology": 5,
+        "technology": 27,
+        "power": 1,
+        "capitalism": 1,
+        "identity": 1
+      },
+      "leading_text": "conferences opening symposium : how cultures shape technology we usually focus our considerations on the impact that the introduction of new technologies makes on culture and society. but technology",
+      "full_text": "conferences opening symposium : how cultures shape technology we usually focus our considerations on the impact that the introduction of new technologies makes on culture and society. but technology has always been a central part of culture, and not only in its applications. perhaps even more strongly, in its development, in the visions and intentions that human beings thereby pursue, it is a direct expression of the cultures and the times from which it emerged. how different cultures form technological developments and applications is the question at the opening symposium of the 2017 ars electronica festival. philosophers and technology designers will scrutinize these interesting dynamics. theme symposium : ai — the other i the first day of the \" ai artificial intelligence. the other i \" conference considers theoretical implica tions of the increasing implementation of neural networks and machine learning in advanced as well as everyday technology. ramifications of an automated society force us to rethink concepts of work, education and income. never before has the idea of basic income and the importance of public safety nets been discussed so intensely. current techniques of mirroring human thought and emoti onal processes onto machine intelligence give us the opportunity or even the obligation to re - evaluate ourselves and redefine our organization of society. in the end, the primary objective might even be the reflection on what constitutes us as human beings. especially since humanity is already experiencing many conflicts of interpersonal communication, there will be a demand for regulating “ inter - intelligent ” communication. what makes anyone good, worthy, morally right or wrong? i reality and expectations even if artificial intelligence seems to be a long way away, many aspects of our lives are already being influenced by autonomous machines and systems. but what constitutes neural networks and machine learning processes, and at which point in its development are we right now? this panel aims to give a deeper insight at the applications of ai and at the promises, fears and potentials of these evolving technologies. ii ethics, philosophy and spirituality what are the sociocultural implications of intensi fying our reliance on digital means? the contemporary discourse on and around ai developments extends well beyond the technological and economic horizon. ethical, philosophical and spiritual questions that arise are being discussed in this panel. iii the other intelligence in mirroring our human strategies for learning and recognition in the designs of artificial intelligence we are forced to reflect on our own thinking processes : how is human thinking constituted? when transferring thinking and learning processes to neural networks it becomes almost impossible to trace how these machines actually proceed. questions on “ the other intelligence ” are this panel's focus."
+    },
+    {
+      "seq_idx": 11667,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 34,
+      "n_hits": 34,
+      "score_density": 0.0664,
+      "per_discourse_hits": {
+        "ecology": 5,
+        "technology": 27,
+        "power": 1,
+        "capitalism": 1,
+        "identity": 1
+      },
+      "leading_text": "conferences opening symposium : how cultures shape technology we usually focus our considerations on the impact that the introduction of new technologies makes on culture and society. but technology",
+      "full_text": "conferences opening symposium : how cultures shape technology we usually focus our considerations on the impact that the introduction of new technologies makes on culture and society. but technology has always been a central part of culture, and not only in its applications. perhaps even more strongly, in its development, in the visions and intentions that human beings thereby pursue, it is a direct expression of the cultures and the times from which it emerged. how different cultures form technological developments and applications is the question at the opening symposium of the 2017 ars electronica festival. philosophers and technology designers will scrutinize these interesting dynamics. theme symposium : ai — the other i the first day of the \" ai artificial intelligence. the other i \" conference considers theoretical implica tions of the increasing implementation of neural networks and machine learning in advanced as well as everyday technology. ramifications of an automated society force us to rethink concepts of work, education and income. never before has the idea of basic income and the importance of public safety nets been discussed so intensely. current techniques of mirroring human thought and emoti onal processes onto machine intelligence give us the opportunity or even the obligation to re - evaluate ourselves and redefine our organization of society. in the end, the primary objective might even be the reflection on what constitutes us as human beings. especially since humanity is already experiencing many conflicts of interpersonal communication, there will be a demand for regulating “ inter - intelligent ” communication. what makes anyone good, worthy, morally right or wrong? i reality and expectations even if artificial intelligence seems to be a long way away, many aspects of our lives are already being influenced by autonomous machines and systems. but what constitutes neural networks and machine learning processes, and at which point in its development are we right now? this panel aims to give a deeper insight at the applications of ai and at the promises, fears and potentials of these evolving technologies. ii ethics, philosophy and spirituality what are the sociocultural implications of intensi fying our reliance on digital means? the contemporary discourse on and around ai developments extends well beyond the technological and economic horizon. ethical, philosophical and spiritual questions that arise are being discussed in this panel. iii the other intelligence in mirroring our human strategies for learning and recognition in the designs of artificial intelligence we are forced to reflect on our own thinking processes : how is human thinking constituted? when transferring thinking and learning processes to neural networks it becomes almost impossible to trace how these machines actually proceed. questions on “ the other intelligence ” are this panel's focus."
+    },
+    {
+      "seq_idx": 87897,
+      "source_id": 4,
+      "source_name": "e-flux",
+      "seq_len": 512,
+      "score": 34,
+      "n_hits": 34,
+      "score_density": 0.0664,
+      "per_discourse_hits": {
+        "technology": 29,
+        "gender": 3,
+        "capitalism": 2,
+        "identity": 1,
+        "ecology": 1
+      },
+      "leading_text": "ryoji ikeda : data. tron / data. scan infinite egress september 26 – december 13, 2009 13750 – 88 avenue",
+      "full_text": "ryoji ikeda : data. tron / data. scan infinite egress september 26 – december 13, 2009 13750 – 88 avenue surrey, british columbia canada v3w 3l1604 - 501 - 5566 www. surrey. ca www. surreytechlab. ca ryoji ikeda : data. tron / data. scan september 26 to december 13, 2009 how many points are there in a line? what is the number of numbers? how can we verify that the random is random? japanese artist ryoji ikeda exhibits two works from his datamatics project, a series of experiments that explore such questions, physically and mathematically. data. tron and data. scan are audiovisual installations composed from a combination of pure mathematics and the vast sea of data present in the world. in both works, each single pixel of the visual image is strictly calculated by mathematical principle. visitors to the exhibition will experience the vast universe of data in the infinite between 0 and 1. data. tron and data. scan present audio - visual relationships relating to large sets of data from two recent meta - scientific investigations that have mapped the human body and the astronomical universe. the large scale vertical projection of data. tron heightens and intensifies the viewer ’ s perception and total immersion within the work, while the horizontal monitor - based data. scan is registered more intimately in relation to the viewer ’ s body. the dialogue of sound and image between data. tron and data. scan address notions of randomness, extremities of scale, and binaries of the visible / audible and invisible / inaudible. the exhibition is produced in conjunction with the 10th anniversary of the surrey art gallery ’ s tech lab digital art residency and exhibition program. the tech lab has incorporated close to 40 exhibitions, projects and residencies of leading edge contemporary digital media art over the past decade. in conjunction with the surrey art gallery ’ s larger program featuring more traditional media, tech lab has presented projects that have ranged from telerobotic sculpture to interactive virtual environments, gps drawing to artificial intelligence and social networking systems. ryoji ikeda : data. tron / data. scan represents the world premiere of data. scan and the canadian premiere of data. tron. data. scan is co - produced by surrey art gallery and forma ( forma. org. uk ). data. tron is co - produced by le fresnoy studio national des arts contemporains and forma."
+    },
+    {
+      "seq_idx": 9535,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 33,
+      "n_hits": 33,
+      "score_density": 0.0645,
+      "per_discourse_hits": {
+        "technology": 23,
+        "ecology": 5,
+        "power": 3,
+        "identity": 2,
+        "gender": 1
+      },
+      "leading_text": "ralf baecker mirage is a projection apparatus that makes uses of principles from optics and artificial neural network research. * mirage * generates a synthesized landscape based",
+      "full_text": "ralf baecker mirage is a projection apparatus that makes uses of principles from optics and artificial neural network research. * mirage * generates a synthesized landscape based on its perception through a fluxgate magnetometer ( forster sonde ). it registers the magnetic field of the earth, which is dependent on the earth ’ s geodynamo and its interactions with the activity of the sun, and feeds it into a unsupervised learning algorithm for analysis. at the same time the algorithm, is inspired by the principle of a helmholz machine, “ dreams ” variations of the previously analyzed signal. these variations are translated into a two - dimensional matrix that physically transforms a thin mirror sheet by 48 muscle wires. the surface of the mirror sheet changes in analogy to the system ’ s state. a thin laser line is directed at the mirror surface at a acute angle to generate a landscape depth like projection on the wall. through the constantly shifting signals the projection resembles a subliminal wandering through a landscape. in 2013 geoff hinton, one of the leading researchers in the area of artificial neural networks and deep learning, joined google to support them on various products that use ai and learning algorithms. he introduced back - propagation algorithms for training multi - layered neural networks. one of his contributions to the field of unsupervised learning algorithms is the helmholtz machine, a machine that uses the principle of a wake - sleep algorithm to consolidate its neural network. the algorithm is trained during the wake phase by its sensory input. in the sleep phase it cuts off its sensory input and feeds the network backwards with random patterns. on its input layer ( retina ) it generates versions of its previously perceived images of the world. i am speculating that the computers in the enormous google data centers cut off their perception ( search queries, user behavior, speech recognition, image data ) once a day and go to “ sleep. ” what do their “ dreams ” look like? ralf baecker ( de ), born in 1977 in dusseldorf, is an artist with a background in computer science. baecker builds systems and machines which explore the poetic potential of technology. his work focuses on the material scope of technology and its cultural construction. his projects have been exhibited internationally and were awarded an honorary mention at the prix ars electronica ( 2012 ), and the second prize of the vida 14. 0 art & artificial life award. in 2007, baecker received a diploma from the academy of media arts in cologne, where he studied audiovisual media at the media art department."
+    },
+    {
+      "seq_idx": 17873,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 32,
+      "n_hits": 32,
+      "score_density": 0.0625,
+      "per_discourse_hits": {
+        "technology": 20,
+        "capitalism": 4,
+        "identity": 3,
+        "race": 2,
+        "ecology": 4,
+        "gender": 3,
+        "power": 1
+      },
+      "leading_text": "science gallery dublin science gallery dublin from cognitive function to machine learning, bias is a shortcut for our brain or for data. the bias garden at ars",
+      "full_text": "science gallery dublin science gallery dublin from cognitive function to machine learning, bias is a shortcut for our brain or for data. the bias garden at ars electronica will interrogate how bias moves from human to machine and how persuasion, preference, motivation and misinformation contribute to our individual societal and digital biases. in a year when we have seen the importance of scientific research, the impact of misinformation, and the effect of social media in polarizing communities, understanding our biases and how they are and are not helpful has never been more critical. we will bring together artists, activists, designers, policymakers, hackers, researchers and technologists to explore the ways in which bias dominates our world today, from algorithmic justice and facial recognition to the empathy crisis and systemic oppression. european artificial intelligence lab, adapt, open science hub, steam inc. this garden is part of the european artificial intelligence lab ( ai lab ) and co - funded by the creative europe program of the european union. this program is presented in the framework of steam inc and is co - funded by the erasmus + programme of the european union. the oshub project has received funding from the european union ’ s horizon 2020 framework programme for research and innovation under grant agreement no. 824581. science gallery dublin bias exploring ai ethics trust and justice ars electronica garden dublin / int formats ●exhibition [UNK] / conference / talk [UNK] [UNK] communication strategies ●social media [UNK] participatory tools [UNK] virtual environments ●on - demand content clams, marco barotti ( it ) the werkleitz festival 2021 move to... sociosphere ecosphere bodydatasphere is a correspondence location of the 2021 ars electronica. during the past 4 years, the artists and collectives at 11 institutions of the european media art platform have been researching the most urgent challenges of our age. the virtual closing exhibition will feature 44 works produced with the support of creative europe. the three spheres of the werkleitz festival provide the framework for these works as well : the sociosphere focuses on the social, political and economic challenges of our digital, globalized world. the ecosphere highlights the consequences of digitalization on our ecosystem, and how knowledge is gained by shifting our perspective away from humans and towards other forms of life. in the context of the bodydatasphere, the artists devote themselves to digital bodies and senses and in particular to the fact that these are increasingly integrated into technological environments, monitored, predicted or controlled by them."
+    },
+    {
+      "seq_idx": 19707,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 31,
+      "n_hits": 31,
+      "score_density": 0.0605,
+      "per_discourse_hits": {
+        "ecology": 6,
+        "capitalism": 2,
+        "power": 5,
+        "identity": 2,
+        "gender": 1,
+        "technology": 14,
+        "postcolonial": 2,
+        "race": 2
+      },
+      "leading_text": "even the mcluhanization of media now seems an attempt to salvage both the collapsing imperatives of modernity and to provide a patch linking utop",
+      "full_text": "even the mcluhanization of media now seems an attempt to salvage both the collapsing imperatives of modernity and to provide a patch linking utopic dispersions of media with the broad corporate and political objectives in which these technologies were developing. in this environment, the reflexive representation systems of modernity were being slowly outdistanced by forms of surveillance in which information served as deeply as observation to regulate behavior. indeed, the reciprocity between information and representation was becoming firmly entangled in the discourses of advertising, politics, aesthetics and cultural history. \" the project of modernity, \" writes friedrich kittler, \" had essentially been one of arms and media technology [ … ] all the better that it was shrouded in a pretty phraseology of democracy and the communication of consensus. \" 5 but the \" solid - state \" in which the electronic disciplines of biology, neurocognition, artificial life and / or intelligence, cyber - democracy, non - located power, electronic economics, rendered authenticity, or pervasive surveillance predominate, cannot be sustained by the reinvention of the simple dialectics nor by the analysis of it within traditional discourses of sociology, psychoanalysis, or critical theory. instead, the seemingly provisional and fast changing sources of authority, masked behind the metaphors of open - systems, technical protocols, mystifications of cyber - democracy, ludicrous and frighteningly comical neo - jungian notions of \" collective intelligence \" and by a glaring lack of serious theorization, have developed a kind of nomadic management paradoxically legitimated by its very lack of centrality and by its intransigent allegiance to the principle of technical reason. if there is a shift represented by these transformations in the late twentieth century, it is not one effected by an attempt to resolve notions of networks systematically closed, but to confront discursively constituted networks : the biology network, the genetic network, the identity network, the culture network, the political network, the economic network, the technology network, the communication network, the image network. hence, it is no surprise that a metaphor of connectionism has emerged to designate the system of nodes in a circulatory system of telematic epistemology. the \" availability \" of information leads, on the one hand, to the presumption of empowerment, and on the other is, in the words of zizek, \" paid for by derealization, \" 6 in which absolute presence is equivalent to the absence of desire."
+    },
+    {
+      "seq_idx": 38439,
+      "source_id": 2,
+      "source_name": "artforum",
+      "seq_len": 512,
+      "score": 31,
+      "n_hits": 31,
+      "score_density": 0.0605,
+      "per_discourse_hits": {
+        "identity": 8,
+        "technology": 2,
+        "capitalism": 3,
+        "race": 13,
+        "power": 2,
+        "postcolonial": 2,
+        "gender": 6,
+        "ecology": 2
+      },
+      "leading_text": "the identity critics complain that they are sad, too ; that they have suffered, too ; that they experience pain, too. liberation is not ( only",
+      "full_text": "the identity critics complain that they are sad, too ; that they have suffered, too ; that they experience pain, too. liberation is not ( only ) about freedom from personal pain, but they are incapable of understanding this, because all they see when they look at you is the open wound of their guilt, or fear. of course, no one seriously believes that the limp corporate strategy of diversity is a blow to the heart of capitalism. people demand to be included in existing institutions because they want to live well now, and not in a revolutionary afterlife. similarly, struggles for higher wages are important without being automatically revolutionary : they are not aimed at a radical rupture, but form part of the continuing face - off between capital and labor. the huge questions of how we might wish to live together are always falling under the shadow of the questions of how to live now ; the identity artist is not the only one whose attempts at survival collude with violence. for the identity critics, reformist desires ( such as demands for better pay ) are acceptable as part of a radical struggle against capitalism when they occur among white men, but not when they are expressed by white women or racialized people in relation to race / gender. for these identity critics, the operation of whiteness ( or racial equivalence — “ we ’ re all exactly the same ” ) is not an object of critique but a baseline or default. they seem, in fact, to see the uninterrogated dominance of whiteness / masculinity as an important aspect of political struggle, because it offers an image of universality. in their condemnatory use of the phraseidentity politics, identityis just a euphemism for not white, not cis, not male, not belonging here. it is difficult to live the multiple valences projected onto you by identity champions and identity critics : both to be a miraculous body, capable of absolving white and misogynist institutions just by your presence, and to have this miraculous power ascribed to a narcissistic desire for difference. although the identity artist is often praised or accused of being “ very personal, ” the material of race / gender is not personal at all. the evocationof the dismal histories and current realities of race / gender in an art context, like evocations of labor, is not often directly aimed at producing actual political effects. art is a place to think, even if it ’ s also a place where that thought gets repackaged and commodified."
+    },
+    {
+      "seq_idx": 65195,
+      "source_id": 2,
+      "source_name": "artforum",
+      "seq_len": 512,
+      "score": 29,
+      "n_hits": 29,
+      "score_density": 0.0566,
+      "per_discourse_hits": {
+        "power": 29
+      },
+      "leading_text": "7 million at sotheby ’ s, shattering auction records kasia fudakowski ( born in london, lives in berlin ) pedro gomez - egan",
+      "full_text": "7 million at sotheby ’ s, shattering auction records kasia fudakowski ( born in london, lives in berlin ) pedro gomez - egana ( born in bucaramanga, lives between bergen and copenhagen ) lungiswa gqunta ( born in port elizabeth, lives in cape town ) andrea joyce heimer ( born in great falls, montana, lives in ferndale, washington ) morag keil and georgie nettell ( born in edinburgh and bedford, both live in london ) olaf metzel ( born in berlin, lives in munich ) mahmoud obaidi ( born in baghdad, lives in burlington, ontario ) henrik olesen ( born in esbjerg, lives in berlin ) erkan ozgen ( born in mardin, lives in diyarbakır ) leander schonweger ( born in meran, lives in vienna ) dan stockholm ( born in thisted, lives in copenhagen ) ali taptık ( born in istanbul, lives in istanbul ) bilal yılmaz ( born in manisa, lives in istanbul ) volkan aslan ( born in ankara, lives in istanbul ) alper aydın ( born in ordu, lives between ordu, ankara, konya, and istanbul ) monica bonvicini ( born in venice, lives in berlin ) louise bourgeois ( born in paris, died in new york ) latifa echakhch ( born in el khnansa, lives in martigny ) candeger furtun ( born in istanbul, lives in istanbul ) kim heecheon ( born in seoul, lives in seoul ) mirak jamal ( born in tehran, lives in berlin ) fernando lanhas ( born in porto, died in porto ) victor leguy ( born in sao paolo, lives in sao paolo ) klara liden ( born in stockholm, lives in berlin ) mahmoud obaidi ( born in baghdad, lives in burlington, ontario ) lydia ourahmane ( born in saida, lives in oran and london ) rayyane tabet ( born in ashquot, lives in beirut ) young - jun tak ( born in seoul, lives in berlin ) kaari upson ( born in san bernadino, california, lives in los angeles ) kemang wa lehulere ( born in cape town, lives in cape town ) yonamine ( born in luanda, lives in harare ) xiao yu ( born in inner mongolia, lives in beijing ) mahmoud khale"
+    },
+    {
+      "seq_idx": 15211,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 28,
+      "n_hits": 28,
+      "score_density": 0.0547,
+      "per_discourse_hits": {
+        "power": 11,
+        "identity": 4,
+        "ecology": 3,
+        "gender": 2,
+        "technology": 7,
+        "capitalism": 2,
+        "postcolonial": 1
+      },
+      "leading_text": "from the world of communication to the utopia of the body1 lucien sfez the succession of so - called \" dominating ideologies \" in the course",
+      "full_text": "from the world of communication to the utopia of the body1 lucien sfez the succession of so - called \" dominating ideologies \" in the course of time is one of the most remarkable social phenomena. these ideologies are indeed rather unstable formations with a tendency to evolve and re - arrange themselves continuously. as with everything symbolic, they are endangered by wear and tear, they start to crumble, fail to be acknowledged by the public and finally strive for renewal by restructuring their constitutive elements. 2 what we are concerned with here is a case in point. on the one hand, it is the ideology of communication which re - shaped the old republican ideology in its own way, and on the other hand, it is the development i call \" utopia of the body \", a newly emerging phenomenon restructuring the elements of communication in a different way and at a different level. 1. the old republican ideology reformulated by communication the symbolic figure uniting liberty, equality and fraternity in a universal project had come to lose its appeal in a world in which technological progress has replaced these three old humanistic and ethical values. worn out as it was, it was no longer a driving force. however, its elements remained significant for real social life. the hegemony of communication, its expansion and power have developed in such a way that the elements can be re - arranged, recombined and fine - tuned in technology. thus, equality, dear to every democratically minded person, recurs in the guise of \" access to information for everybody \". what remained unanswered in politics may now be solved by means of technology : the transparency of information ensures equal opportunities while liberty becomes interactivity by the same token, a process of change ends in the technological progress of communication machinery, progress that leaves individuals the freedom to intervene vis - a - vis the determinism of machines. as for fraternity, it is guaranteed by the combination of transparency and interactivity : conviviality * ) becomes the third notion replaced in the old tripartite system. this goes to show how the figure uniting technical modernity and humanistic values \" came into being \" — the artefact of the industrial machine and human nature in its striving for a better world, better informed, more adaptable, less hierarchical : the notions of the network, self - organisation, autopoiesis, the concepts of paradoxa and the construction of reality reflect the shift away from ethical voluntarism and hierarchical systems. that's what happiness is."
+    },
+    {
+      "seq_idx": 54115,
+      "source_id": 2,
+      "source_name": "artforum",
+      "seq_len": 512,
+      "score": 28,
+      "n_hits": 28,
+      "score_density": 0.0547,
+      "per_discourse_hits": {
+        "power": 28
+      },
+      "leading_text": "mack born 1987 in columbia, maryland lives in new york, new york calvin marcus born 1988 in san francisco, california lives in los angeles, california ti",
+      "full_text": "mack born 1987 in columbia, maryland lives in new york, new york calvin marcus born 1988 in san francisco, california lives in los angeles, california tiona nekkia mcclodden born 1981 in blytheville, arkansas lives in philadelphia, pennsylvania troy michie born 1985 in el paso, texas lives in brooklyn, new york joe minter born 1943 in birmingham, alabama lives in birmingham, alabama keegan monaghan born 1986 in evanston, illinois lives in brooklyn, new york caroline monnet born 1985 in ottawa, ontario lives in montreal, quebec darius clark monroe born 1980 in houston, texas lives in brooklyn, new york ragen moss born 1978 in new york, new york lives in los angeles, california sahra motalebi born 1979 in birmingham, alabama lives in new york, new york, and delaware county, new york marlon mullen born 1963 in richmond, california lives in rodeo, california jeanette mundt born 1982 in princeton, new jersey lives in somerset, new jersey wangechi mutu born 1972 in nairobi, kenya lives in brooklyn, new york, and nairobi, kenya las nietas de nono ( lydela nono and michel nono ) established 2011 lydela nono born 1979 in san juan, puerto rico lives in carolina, puerto rico michel nono born 1982 in san juan, puerto rico lives in carolina, puerto rico jenn nkiru born 1987 in london, united kingdom lives in london, united kingdom laura ortman born 1973 in whiteriver, arizona lives in brooklyn, new york jennifer packer born 1984 in philadelphia, pennsylvania lives in new york, new york nibia pastrana santiago born 1987 in caguas, puerto rico lives in san juan, puerto rico elle perez born 1989 in the bronx, new york lives in brooklyn, new york pat phillips born 1987 in lakenheath, united kingdom lives in pineville, louisiana gala porras - kim born 1984 in bogota, colombia lives in los angeles, california walter price born 1989 in macon, georgia lives in brooklyn, new york carissa rodriguez born 1970 in new york, new york lives in new york, new york paul mpagi sepuya born 1982 in san bernardino, california lives in los angeles, california heji shin born 1983 in seoul, south korea lives in new york, new york diane simpson born 1935 in joliet, illinois lives in wilmette, illinois martine syms born 1988 in los angeles, california lives in los angeles, california kyle thurman born 1986 in west chester"
+    },
+    {
+      "seq_idx": 119806,
+      "source_id": 5,
+      "source_name": "moussemagazine",
+      "seq_len": 512,
+      "score": 28,
+      "n_hits": 28,
+      "score_density": 0.0547,
+      "per_discourse_hits": {
+        "postcolonial": 6,
+        "power": 6,
+        "gender": 12,
+        "technology": 3,
+        "ecology": 1
+      },
+      "leading_text": "power always has its interzones, where everyday life is not about prodding the disciplined subject into some useful function under threat of punishment. the inter",
+      "full_text": "power always has its interzones, where everyday life is not about prodding the disciplined subject into some useful function under threat of punishment. the interzone is about the technics of drives, where bodies want what they want. drives are not desires. a subject desires what it lacks. a drive is the body intensifying. power, whether of states or corporations, maintains relations to both desires and drives. desires get a lot of attention from artists and theorists, but drives, not so much. cheang is interesting to me as an artist who invents languages for the way technics modifies power ’ s relation to drives. her curiosity pertains to drives that exceed desire and the law. this isn ’ t just the romantic celebration of the out - sider. her work centers the bodies of those with marginal - ized drives as ambivalent figures : gay bodies, queer bodies, trans bodies, cyber bodies, drug bodies. these bodies, these drives, feel the sting of two kinds of power. one is not the law, but the police. in the interzone, the police are lawless, pure agents of their own violent drives. the other, more contemporary power is the corporation. the interzone persists because it has its uses, and those change. cheang ’ s work clocked the emergence of corporate uses of the interzone : for recruitment, marketing, product placement, research and development, extraction. the interzone became the corporation ’ s petri dish. the activities of the interzone, where drives are serviced, are not exactly labor or leisure or play or art. from the point of view of the corporation, they ’ re extractable modes of life. the corporation extends control into the interzone, not for purposes of suppression, but for purposes of extraction. my favorites of cheang ’ s works along these lines are the feature films i. k. u. ( 2000 ) and fluidø ( 2017 ). in i. k. u., the genom corporation sells a portable electronic device that delivers downloadable orgasms, but first must harvest orgasm experiences from the sexual interzone that it can privatize and sell. in the world of fluidø, hiv is no longer a fatal disease. in some people it caused a mutation ; their bodies now create a psychoactive drug, which leads to human trafficking and a new drug trade. in both, cheang finds a visual language for the circuit of drives, bodies, interzones, control, and corporate power."
+    },
+    {
+      "seq_idx": 10376,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 27,
+      "n_hits": 27,
+      "score_density": 0.0527,
+      "per_discourse_hits": {
+        "technology": 10,
+        "gender": 10,
+        "postcolonial": 3,
+        "power": 3,
+        "identity": 2,
+        "race": 2
+      },
+      "leading_text": "a pop science - fiction nightmare. this new cyborg's origin in feminist debate about overturning the classic hierarchical binary oppositions ( man /",
+      "full_text": "a pop science - fiction nightmare. this new cyborg's origin in feminist debate about overturning the classic hierarchical binary oppositions ( man / woman, reason / emotion, culture / nature and so forth ) is well understood. the cyborg body is a constructed one, and hence can potentially be reconstructed, a proposition which makes the feminist project a matter of research, rebuilding and redefinition, rather than a metaphysical struggle against a protean foe, or a quasi - spiritual refusal of masculinised reality. the cyborg, in short, makes change realisable. however, beyond semiotics, beyond even the terms of the feminist debate into which she first introduced it, haraway's cyborg has the potential to change the way in which we think about bodies, networks, power and machines. by reframing cultural debate in radically material terms ( cybernetic mechanisms of communication and control operating through assemblages of bodies, technology, and social protocols ) the cyborg makes possible a type of thought unavailable to the dominant crop of semiotically - based theories. for semiotics, materiality is an unattainable horizon, the gap between signifier and signified, a gulf whose resistance to rhetorical bridging produces feelings of loss, entrapment and despair. poetic mourning often becomes itself the focus of critical energy, leaving other problems to fend for themselves. the cyborg's response to this semiotic melancholia is to utilise shock tactics — reaching inside its stomach and pulling out a handful of guts, lifting flaps of skin to show the bloody servo - mechanisms swarming beneath. the cyborg forces us to situate thought in the body, and in turn to situate bodies in networks which contain elements of biology, politics, desire and technology. it produces continuities between these disparate strata, allowing us to think what would otherwise be unthinkable. of course, asserting some uncomplicated notion of \" the real \" or \" the material \" against language was, once upon a time, the tactic of thinkers ( on left and right ) who wished to preserve certain sacred spaces, free of interpretation. marauding linguistic post - modernists could invariably be sure that in these priest - holes, these secret stashes, they would unearth the fetishes of power. god, man, woman, the law, the state — hiding places of the unanswerable, the unquestionable."
+    },
+    {
+      "seq_idx": 15014,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 27,
+      "n_hits": 27,
+      "score_density": 0.0527,
+      "per_discourse_hits": {
+        "technology": 17,
+        "capitalism": 6,
+        "ecology": 1,
+        "identity": 1,
+        "gender": 1,
+        "power": 1
+      },
+      "leading_text": "since its inception, a considerable expenditure of effort has gone into this : etsi working groups have produced approximately 150 papers detailing technical requirements, specifications and standards",
+      "full_text": "since its inception, a considerable expenditure of effort has gone into this : etsi working groups have produced approximately 150 papers detailing technical requirements, specifications and standards regulating how data are to be captured from all sorts of networks. in order for this data traffic to function among different networks, there have to be a standardized interface and protocols that specify in which order these data are sent to the interface. standards have also been developed that specify the way in which the data is delivered to law enforcement agencies. already in 1999, and thus years before the first umts networks went into operation, the technical details were established as to the points in the umts network at which internet traffic and mms would be intercepted. following the pattern of live surveillance standards ( etsi es 201 671 and related regulations ), a data retention interface is now being standardized. telecommunications companies and mobile service providers must maintain in their systems detailed traffic records about all customers and, upon request, deliver them via dedicated interface to law enforcement agencies. so far, so legal. the fact that the key positions on these surveillance standards committees are occupied by intelligence agency personnel, and that technicians from these agencies ’ private sector suppliers are playing along certainly provides food for thought. whoever controls these surveillance interfaces doesn ’ t just have civil society's current forms of telecommunications in their sights. an assessment of the historical data sets of any telephone line invariably delivers an incredibly precise reflection of a private individual's social milieu or a company ’ s business activities. no one knows that better than intelligence agency bureaucrats ; after all, analysis of communications traffic has been part of their espionage repertoire for over a century. thus, the level of commitment to data retention is high. the so - called reporter responsible for the eu ’ s data retention specifications sheet is a specialist on the staff of the intelligence agency of the netherlands, pids ( platform interceptie, decryptie en signaalanalyse ). germany ’ s federal office for the protection of the constitution, in turn, formulated the body of rules regulating how the data sets are to be delivered via the interface. the secretary and numerous staff members have been provided by the british home office. among the private sector associates actively involved in this effort is verisign, a firm with very close ties to the us military - electronic complex, which is also represented in the etsi by a former high - ranking fbi agent who was responsible for implementing telephone surveillance in the united states. other sponsors of the data retention interface are the israeli telecommunications surveillance etsi es 201 671."
+    },
+    {
+      "seq_idx": 27250,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 27,
+      "n_hits": 27,
+      "score_density": 0.0527,
+      "per_discourse_hits": {
+        "technology": 17,
+        "capitalism": 6,
+        "ecology": 1,
+        "identity": 1,
+        "gender": 1,
+        "power": 1
+      },
+      "leading_text": "since its inception, a considerable expenditure of effort has gone into this : etsi working groups have produced approximately 150 papers detailing technical requirements, specifications and standards",
+      "full_text": "since its inception, a considerable expenditure of effort has gone into this : etsi working groups have produced approximately 150 papers detailing technical requirements, specifications and standards regulating how data are to be captured from all sorts of networks. in order for this data traffic to function among different networks, there have to be a standardized interface and protocols that specify in which order these data are sent to the interface. standards have also been developed that specify the way in which the data is delivered to law enforcement agencies. already in 1999, and thus years before the first umts networks went into operation, the technical details were established as to the points in the umts network at which internet traffic and mms would be intercepted. following the pattern of live surveillance standards ( etsi es 201 671 and related regulations ), a data retention interface is now being standardized. telecommunications companies and mobile service providers must maintain in their systems detailed traffic records about all customers and, upon request, deliver them via dedicated interface to law enforcement agencies. so far, so legal. the fact that the key positions on these surveillance standards committees are occupied by intelligence agency personnel, and that technicians from these agencies ’ private sector suppliers are playing along certainly provides food for thought. whoever controls these surveillance interfaces doesn ’ t just have civil society's current forms of telecommunications in their sights. an assessment of the historical data sets of any telephone line invariably delivers an incredibly precise reflection of a private individual's social milieu or a company ’ s business activities. no one knows that better than intelligence agency bureaucrats ; after all, analysis of communications traffic has been part of their espionage repertoire for over a century. thus, the level of commitment to data retention is high. the so - called reporter responsible for the eu ’ s data retention specifications sheet is a specialist on the staff of the intelligence agency of the netherlands, pids ( platform interceptie, decryptie en signaalanalyse ). germany ’ s federal office for the protection of the constitution, in turn, formulated the body of rules regulating how the data sets are to be delivered via the interface. the secretary and numerous staff members have been provided by the british home office. among the private sector associates actively involved in this effort is verisign, a firm with very close ties to the us military - electronic complex, which is also represented in the etsi by a former high - ranking fbi agent who was responsible for implementing telephone surveillance in the united states. other sponsors of the data retention interface are the israeli telecommunications surveillance etsi es 201 671."
+    },
+    {
+      "seq_idx": 94553,
+      "source_id": 4,
+      "source_name": "e-flux",
+      "seq_len": 512,
+      "score": 27,
+      "n_hits": 27,
+      "score_density": 0.0527,
+      "per_discourse_hits": {
+        "technology": 16,
+        "ecology": 5,
+        "power": 4,
+        "capitalism": 3,
+        "identity": 1,
+        "gender": 1,
+        "postcolonial": 1,
+        "race": 1
+      },
+      "leading_text": "how can we expand our understanding of intelligence? how can we live together with machines? who is coding the code? ether ’ s bloom : a programme",
+      "full_text": "how can we expand our understanding of intelligence? how can we live together with machines? who is coding the code? ether ’ s bloom : a programme on artificial intelligence taking place both online and offline, the gropius bau ’ s first programme on artificial intelligence focuses on the utopian and poetic possibilities of ai. until 14 january 2024, the first part of the programme, ether ’ s bloom, presents a variety of different formats including artistic presentations, a new writer in residenceformat with k allado - mcdowell, the podcast beyond and within : ai talks, as well as conversations and workshops. the admission to the programme is free. emerging developments in the field of ai are touching everyone and everything — excluding, connecting, and otherwise affecting human and non - human entities alike. in this moment of anticipation and criticism, ether ’ s bloominvites visitors to engage with the experimental, ethical and poetic dimensions now blossoming through new networks of knowledge production. the artists and thinkers in ether ’ s bloomchallenge us to reconsider the established ways we relate to one another, to other life forms and to machines. ether ’ s bloomis accompanied by the thinking and contemplation of cultural scientist, researcher and writer maya indira ganesh, who is present throughout the year with new content and publications in various forms. freely accessible installations until january 14, 2024elisa giardina papa ’ s trilogy technologies of care ( 2016 ) surveys the ways in which al and digital economies are reframing the politics of labour and the practice of care. mimi onuoha ’ s short film these networks in our skin ( 2021 ) points to the contradictions inherent in the premise of technological “ progress ” and illuminates a path for a more expansive understanding of technology that embraces the traditions and values of those whose histories have been erased in the name of development. the artist duokennedy + swanilluminates the benefits of interspecies connections and reveals the constructive power of future ai systems. the new commissioned watercolour and ar work mixed signals ( 2023 ) delves into the intriguing relationship between artificial intelligence, non - human communication systems and our human perceptions of them. patricia dominguez ’ s works explore ecological myth - making, multispecies relationships and digitisation of life under corporatised, late capitalism. the two video installationsmadre drone ( 2019 – 2020 ) and holographic milk ( 2021 ) explore various dimensions of spiritual and non - human intelligences."
+    },
+    {
+      "seq_idx": 950,
+      "source_id": 0,
+      "source_name": "afterall",
+      "seq_len": 512,
+      "score": 26,
+      "n_hits": 26,
+      "score_density": 0.0508,
+      "per_discourse_hits": {
+        "power": 8,
+        "identity": 2,
+        "gender": 1,
+        "technology": 3,
+        "race": 3,
+        "capitalism": 1,
+        "ecology": 6,
+        "postcolonial": 5
+      },
+      "leading_text": "with globalisation and international cultural markets becoming the norm as elsewhere, artists and their institutions have not only been forced to readdress their role in the",
+      "full_text": "with globalisation and international cultural markets becoming the norm as elsewhere, artists and their institutions have not only been forced to readdress their role in the politics of the region and the transnational networks they need in order to survive, but also to present palestine ’ s plight and make contributions to critical global conversations in arts and activism more broadly. responding to the long - term effects of this predicament, both eltiqaa and tqof were interested in how value can be generated by the sources that already exist in the locked - up situation of gaza and how a system that is non - competitive can be created to source and create art in a more sustainable and less dependent fashion. in the context of documenta fifteen, tqof presented a two - part contribution : the proposition of a communal economic model called dayra ( arabic for ‘ circle ’ or ‘ circling ’ ), based on blockchain technologies and meant to replace palestinian dependence on international funding ; and an exhibition co - curated with eltiqaa that sought to learn from the economic models of self - sustenance pioneered by the latter. this exhibition explored how one can produce, document, accumulate and disseminate resources and knowledge about cultural practices under conditions of coloniality, where the systems of power in place presuppose a racialised hierarchical order based on eurocentric understandings of what are considered acceptable forms of knowledge. 14 coloniality here refers not just to the broad colonial ideologies and structural asymmetries still present in the global system of contemporary art exhibitions, but also to the specific palestinian context as defined by israeli settler - colonial practices of land dispossession, ethnic cleansing, military domination and cultural exclusion. supported by an architecture of bureaucratic hurdles and procedures, the israeli occupation employs a carefully designed system of legalised, institutionalised and normalised racial discrimination ( or apartheid ) to debilitate the freedom of movement of objects, people and ideas that any artistic or cultural institutions of knowledge production requires in order to function. 15 it was the intricacies of how cultural producers and specifically artists living in gaza creatively navigate their way around the banality of such everyday military violence that tqof and eltiqaa arguably wanted to highlight in their contribution to documenta fifteen. as curator and artist yazan khalili, one of the members of tqof who invited eltiqaa, asks : ‘ can there be apolitical art produced in this context? were they [ eltiqaa ] creating political or apolitical art?"
+    },
+    {
+      "seq_idx": 5409,
+      "source_id": 1,
+      "source_name": "ars_electronica",
+      "seq_len": 512,
+      "score": 26,
+      "n_hits": 26,
+      "score_density": 0.0508,
+      "per_discourse_hits": {
+        "gender": 15,
+        "identity": 5,
+        "capitalism": 3,
+        "technology": 3,
+        "power": 2
+      },
+      "leading_text": "intensity of which constitutes the significance of that movement for the body that ’ s being placed in tension by it. the body expresses this tension, which directly",
+      "full_text": "intensity of which constitutes the significance of that movement for the body that ’ s being placed in tension by it. the body expresses this tension, which directly leads to sound production through the body or through instruments – musical or otherwise — that extend it. for the purpose of increasing its “ chance of survival, ” this sonically performative expression has a communicative effect : through ( physical ) imitation, it invites to internalization ; it is “ emotionally contagious. ” culturally speaking, we refer to qualities of excitation as emotions, which will vary according to the situational context. sound gesture is a sonically performative modality of the human body ’ s interaction with the environment, which — based on its analysis of movements according in relation to their bodily excitation value — experiences an analyzing, shaping “ in - tension. ” this corresponds to an intentional body - environment interaction ; a hedonically dominated, mechanically passive shaping of virtualities — mechanical and non - mechanical — in harmony with the body. while digital culture — as a seeing and mechanistic culture — brought with it the transgression of the body ; post - digital culture features the inclusion of the body in the artificial worlds / natures of “ converged realities. ” sound gesture : paradigm of emotional experiential worlds, extending beyond the sonically performative. sound gesture is the paradigm of bodily life and, consequently, the shaping of converged realities. excitation - based and proximal emotional interaction is the paradigm of intuitively emotional interfaces. sound gesture is thus the composition of two compressed sonic performativities : 1. the imagination and the bodily comprehension of the sound in its modulation and so in its emotional, spatio - temporal “ movement ” at a remove from physical spatialization, and ; 2. the bodily expression of the significance of this “ movement ” for the body and through its state of tension is based on its affectedness, which correlates in turn to its intensity ( sharpness / loudness ). this physical tension naturally finds expression in bodily movement as well as in “ sound ” – in other words, it directly communicates “ excitation. ” the concept of sound gesture describes the nature of the body ’ s culture - building interactions with “ natural, ” social, physical, as well as virtual environments, and their conversions. in the specificity of a sonically performative interaction as opposed to a visual, instrumental action ; the sound gesture may be regarded as a model for forms of emotional interaction."
+    }
+  ]
+}

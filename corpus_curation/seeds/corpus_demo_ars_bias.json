@@ -1,0 +1,11 @@
+{
+  "tag": "ars_bias",
+  "source_seq_idx": 17873,
+  "source_name": "ars_electronica",
+  "source_id_original": 1,
+  "seq_len": 512,
+  "tokens_sha256": "68fca2e4a16ac180bc41753e9b78d32583da787b9b713138bd5e0037b20d22e4",
+  "lemmas_sha256": "d86856da21f4e6f1133474eb61f312f0bfc3c3cf072c5d59e7168284864b547a",
+  "corpus_path": "web/corpus_curation/seeds/corpus_demo_ars_bias.bin",
+  "words_path": "web/corpus_curation/seeds/corpus_words_demo_ars_bias.bin"
+}
