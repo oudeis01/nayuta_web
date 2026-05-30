@@ -1,0 +1,9 @@
+# Build artifacts and copied assets (regenerable via pack_transfer.sh)
+dist/
+# A/B listening samples pulled from the instance
+ab_samples/
+# On-instance outputs / logs (never on this workstation, but guard anyway)
+out_accent/
+accent_qa_log.json
+*.log
+__pycache__/

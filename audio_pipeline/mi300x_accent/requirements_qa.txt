@@ -1,0 +1,6 @@
+# QA-side runtime deps for generate_accent_qa_mi300x.py.
+# torch + omnivoice come from the ROCm container + upstream clone (setup_instance.sh).
+librosa>=0.10
+praat-parselmouth>=0.4.3
+soundfile>=0.12
+numpy>=1.24
