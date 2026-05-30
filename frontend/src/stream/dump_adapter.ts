@@ -10,9 +10,26 @@ import type { EventStream, OscEvent, OpRec } from "./types";
 // letting the viewer scrub speed.
 //
 // Pull model: the host owns the rAF loop and calls advance() once per frame.
-// onOsc handlers fire synchronously inside advance(). ops.bin (the high-rate
-// OpRec stream) is not loaded here yet; panels that need it (Monitor B,
-// Screen 0) will extend this adapter.
+// onOsc/onOpRec handlers fire synchronously inside advance().
+//
+// ops.bin.zst is loaded lazily (load({ ops: true })) only when a consuming
+// panel is mounted, since it is ~97 MB compressed / ~180 MB decompressed. The
+// stream is rate-limited at the source to ~1,092 recs/s, so replay is gentle;
+// the cost is the resident buffer, which we keep as the raw decompressed bytes
+// plus a lightweight frame index and walk with a cursor (never exploding all
+// ~8M records into JS objects up front).
+//
+// ops.bin framing (written by the Rust tap): a sequence of
+//   [ts_ns: u64 LE][len: u32 LE][payload: len bytes]
+// where each payload is one ZMQ OpMsg:
+//   [base_op_count: u64][count: u16][version: u16][reserved: u32] then count×OpRec(24B)
+interface OpFrame {
+  tsNs: number;
+  recOff: number; // byte offset of records[0] within opsRaw
+  count: number; // valid records in this frame
+  base: number; // global op_count of records[0]
+}
+
 export class DumpAdapter implements EventStream {
   private oscHandlers: ((ev: OscEvent) => void)[] = [];
   private opHandlers: ((rec: OpRec) => void)[] = [];
@@ -24,6 +41,12 @@ export class DumpAdapter implements EventStream {
   private speed = 1;
   private paused = false;
   private baseUrl: string;
+
+  // ops.bin replay state (populated only when load({ ops: true })).
+  private opsRaw?: Uint8Array;
+  private opsView?: DataView;
+  private frames: OpFrame[] = [];
+  private frameIdx = 0;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
@@ -56,7 +79,7 @@ export class DumpAdapter implements EventStream {
     return this.idx >= this.events.length;
   }
 
-  async load(): Promise<void> {
+  async load(opts: { ops?: boolean } = {}): Promise<void> {
     const res = await fetch(`${this.baseUrl}/events.jsonl.zst`);
     if (!res.ok) throw new Error(`fetch ${this.baseUrl}: ${res.status}`);
     const comp = new Uint8Array(await res.arrayBuffer());
@@ -74,6 +97,59 @@ export class DumpAdapter implements EventStream {
     this.t0 = evs.length ? evs[0].tsNs : 0;
     this.idx = 0;
     this.playT = 0;
+
+    if (opts.ops) await this.loadOps();
+  }
+
+  // Decompress ops.bin and index its frames without materializing records. Each
+  // frame stores its capture ts (same clock as the OSC events, so the two share
+  // one playback timeline) and where its records live in the resident buffer.
+  private async loadOps(): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/ops.bin.zst`);
+    if (!res.ok) throw new Error(`fetch ${this.baseUrl}/ops.bin: ${res.status}`);
+    const comp = new Uint8Array(await res.arrayBuffer());
+    const raw = decompress(comp);
+    const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+
+    const frames: OpFrame[] = [];
+    let off = 0;
+    while (off + 12 <= raw.length) {
+      const tsNs = dv.getUint32(off, true) + dv.getUint32(off + 4, true) * 4294967296;
+      const len = dv.getUint32(off + 8, true);
+      off += 12;
+      if (off + len > raw.length || len < 16) break;
+      const base = dv.getUint32(off, true) + dv.getUint32(off + 4, true) * 4294967296;
+      const declared = dv.getUint16(off + 8, true);
+      const capacity = Math.floor((len - 16) / 24);
+      frames.push({ tsNs, recOff: off + 16, count: Math.min(declared, capacity), base });
+      off += len;
+    }
+    frames.sort((a, b) => a.tsNs - b.tsNs);
+    this.opsRaw = raw;
+    this.opsView = dv;
+    this.frames = frames;
+    this.frameIdx = 0;
+  }
+
+  // Decode one 24-byte OpRec at byte offset p, reconstructing the record's
+  // global op_count from the frame base (op_count_lo is its low 32 bits).
+  private readOp(p: number, base: number): OpRec {
+    const dv = this.opsView!;
+    const lo = dv.getUint32(p, true);
+    let opCount = Math.floor(base / 4294967296) * 4294967296 + lo;
+    if (opCount < base) opCount += 4294967296;
+    return {
+      opCount,
+      opType: this.opsRaw![p + 4],
+      layer: this.opsRaw![p + 5],
+      head: this.opsRaw![p + 6],
+      flags: this.opsRaw![p + 7],
+      qPos: dv.getUint16(p + 8, true),
+      kPos: dv.getUint16(p + 10, true),
+      a: dv.getFloat32(p + 12, true),
+      b: dv.getFloat32(p + 16, true),
+      r: dv.getFloat32(p + 20, true),
+    };
   }
 
   // Advance playback by one frame; returns the playback dt (seconds) so the
@@ -86,6 +162,17 @@ export class DumpAdapter implements EventStream {
     while (this.idx < this.events.length && this.events[this.idx].tsNs <= cutoff) {
       const ev = this.events[this.idx++];
       for (const h of this.oscHandlers) h(ev);
+    }
+    // Fire op frames on the same timeline (OSC first, matching the C++ panels
+    // that process axis events before the op batch).
+    while (this.frameIdx < this.frames.length && this.frames[this.frameIdx].tsNs <= cutoff) {
+      const fr = this.frames[this.frameIdx++];
+      let p = fr.recOff;
+      for (let i = 0; i < fr.count; i++) {
+        const rec = this.readOp(p, fr.base);
+        for (const h of this.opHandlers) h(rec);
+        p += 24;
+      }
     }
     return pdt;
   }

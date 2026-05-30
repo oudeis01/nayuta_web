@@ -1,4 +1,4 @@
-import type { OscEvent } from "../stream/types";
+import type { OscEvent, OpRec } from "../stream/types";
 
 // Monitor C — The Clock. Faithful port of graphics_consumer/src/screens/mon_clock.cpp
 // (the canonical source; action plan 8-5 names C++ as ground truth).
@@ -129,7 +129,7 @@ export class MonClock {
     return true;
   }
 
-  update(events: OscEvent[], dt: number): void {
+  update(events: OscEvent[], _ops: OpRec[], dt: number): void {
     this.elapsedTotal += dt;
     this.axis1Timer = Math.max(0, this.axis1Timer - dt);
     this.axis3Timer = Math.max(0, this.axis3Timer - dt);
