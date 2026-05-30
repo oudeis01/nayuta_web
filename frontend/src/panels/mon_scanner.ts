@@ -1,4 +1,5 @@
 import type { OscEvent, OpRec } from "../stream/types";
+import { Helix } from "../geometry/helix";
 
 // Monitor A — Token Scanner. Faithful port of graphics_consumer/src/screens/
 // mon_scanner.cpp. The top third shows the sentence being processed (BERT
@@ -75,6 +76,9 @@ export class MonScanner {
   private rEma = 0;
   private rEmaPeak = 0.001;
 
+  // background helix (cross-section view) behind the sentence area
+  private helix = new Helix();
+
   private time = 0;
 
   // sentence layout cache (rebuilt only when content / font / width change)
@@ -99,6 +103,10 @@ export class MonScanner {
 
   update(events: OscEvent[], ops: OpRec[], dt: number): void {
     this.time += dt;
+
+    // Helix energy from the |r| EMA (last frame's state, as in the C++ panel).
+    const energy = this.rEmaPeak > 0 ? 0.6 + 1.8 * (this.rEma / this.rEmaPeak) : 1.0;
+    this.helix.update(events, dt, energy);
 
     for (const ev of events) {
       switch (ev.path) {
@@ -246,6 +254,9 @@ export class MonScanner {
     const sentTop = y + 22 * s;
     const sentH = h * 0.35;
     const dividerY = sentTop + sentH;
+
+    // Background helix (cross-section) in the top-right; tokens render on top.
+    this.helix.draw(ctx, x + w * 0.6, sentTop, w * 0.4, sentH, "cross", 0.6);
 
     if (this.nTokens > 0) {
       if (this.layoutDirty || this.layoutFs !== fontMD || this.layoutW !== w) {

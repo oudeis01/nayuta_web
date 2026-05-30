@@ -1,4 +1,5 @@
 import type { OscEvent, OpRec } from "../stream/types";
+import { Nebula } from "../geometry/nebula";
 
 // Monitor D — Whisper Log. Faithful port of the graphics_consumer whisper panel
 // (action plan 8-4; design doc "Monitor D"). Each /bert/whisper event fires when
@@ -39,6 +40,10 @@ export class MonWhisper {
   private dict: LemmaDict = {};
   private blink = 0;
 
+  // Background discourse nebula (semantic neighbor graph) — sibling form to the
+  // structural Helix, fed the same whisper events as the log.
+  private nebula = new Nebula();
+
   // Resolve a lemma_id to its display surface. Unknown ids (out of corpus)
   // degrade to a bracketed numeric so the panel never renders a blank pair.
   private surface(lemmaId: number): string {
@@ -67,6 +72,14 @@ export class MonWhisper {
             const nbrId = a[12];
             const dist = a[14];
             this.push({ kind: "pair", src: this.surface(srcId), dst: this.surface(nbrId), dist, bridge });
+
+            // Feed the discourse nebula: src + up to 4 nearest neighbors.
+            const nbrs: [string, number][] = [];
+            const kn = Math.min(nNbr, 4);
+            for (let i = 0; i < kn; i++) {
+              nbrs.push([this.surface(a[12 + i * 3]), a[14 + i * 3]]);
+            }
+            this.nebula.addWhisper(this.surface(srcId), nbrs, bridge);
           }
           break;
         }
@@ -96,6 +109,8 @@ export class MonWhisper {
       else e.fadeIn = Math.min(1, e.fadeIn + dt / FADE_IN);
     }
     this.entries = this.entries.filter((e) => !(e.dying && e.death >= FADE_OUT));
+
+    this.nebula.update(dt);
   }
 
   render(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
@@ -106,6 +121,12 @@ export class MonWhisper {
 
     ctx.fillStyle = "#000";
     ctx.fillRect(x, y, w, h);
+
+    // Discourse nebula spans the panel as a background layer; the log feed draws
+    // on top at the top-left (faithful to the panel's "background nebula" intent).
+    const footerH = 20 * s;
+    this.nebula.draw(ctx, x + 8 * s, y + 24 * s, w - 16 * s, h - 24 * s - footerH, 11 * s);
+
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
