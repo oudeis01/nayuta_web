@@ -294,19 +294,36 @@ function renderLayout() {
     const stripH = Math.round(H * STRIP_FRAC);
     const topH = H - stripH;
 
-    if (topPanel) topPanel.render(ctx, GAP, GAP, W - GAP * 2, topH - GAP * 2);
+    if (topPanel) clipRender(topPanel, GAP, GAP, W - GAP * 2, topH - GAP * 2);
 
     const total = slots.reduce((sum, s) => sum + s.weight, 0);
     let x = 0;
     for (const s of slots) {
       const w = Math.round((W * s.weight) / total);
-      s.panel.render(ctx, x + GAP, topH + GAP, w - GAP * 2, stripH - GAP * 2);
+      clipRender(s.panel, x + GAP, topH + GAP, w - GAP * 2, stripH - GAP * 2);
       x += w;
     }
   } else {
     const panel = viewPanel(viewMode);
-    if (panel) panel.render(ctx, GAP, GAP, W - GAP * 2, H - GAP * 2);
+    if (panel) clipRender(panel, GAP, GAP, W - GAP * 2, H - GAP * 2);
   }
+}
+
+// Render a panel clipped to its own rect so nothing it draws (e.g. the mandala's
+// radial arcs) can ever bleed onto a neighbouring panel on the shared canvas.
+function clipRender(
+  panel: { render: (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => void },
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  panel.render(ctx, x, y, w, h);
+  ctx.restore();
 }
 
 // Current capture position as m:ss (— before a tag is loaded).

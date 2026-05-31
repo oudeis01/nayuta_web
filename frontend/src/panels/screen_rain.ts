@@ -1,18 +1,39 @@
 import type { OscEvent, OpRec } from "../stream/types";
 
 // Screen 0 — Computation Rain. Port of graphics_consumer/src/screens/screen_rain.cpp
-// (spec: docs/computation_rain_spec.md). A 64×64 phase-space heatmap: x = a-axis
-// (operand_a), y = r-axis (result). Each frame the live ops paint bright cells,
-// then everything decays, leaving comet-like trails of the running computation.
+// (spec: docs/computation_rain_spec.md). A 64×64 heatmap: x = k_pos (the matmul
+// i-index, sweeping in real time), y = symMap(result). Each frame the live ops
+// paint bright cells, then everything decays, leaving comet-like trails of the
+// running computation. (The original C++ used x = operand_a; see the rework note.)
 //
 // AUTHENTICITY DEVIATION (one, deliberate — user decision 2026-05-30):
 //   The canonical C++ always paints a *synthetic* Gaussian cloud (plotWeightSpace,
 //   18 pts/frame) and only plots real data for MulAttnQK (q_pos, k_pos). But the
 //   project's firm constraint forbids synthetic/random-walk data. So instead of
 //   the Gaussian, we plot the REAL captured op operands: every incoming OpRec's
-//   (a, r) goes through the same running-RMS adaptive scaling the C++ uses, so the
-//   rain *is* the actual QKV-projection numbers raining down. The canonical real
-//   MulAttnQK (q,k) path is kept intact but stays dormant here (see note below).
+//   (a, r) is mapped into the phase space. The canonical real MulAttnQK (q,k) path
+//   is kept intact but stays dormant here (see note below).
+//
+// X = i-INDEX SWEEP, Y = symMap(RESULT) (2026-05-31 rework, user-approved):
+//   The first attempt used the canonical x = operand_a. Two problems made the
+//   screen look frozen. (1) op_type diversity is confined to the first ~35% of the
+//   stream; the remaining 65% (≈78 min at install pace) is 100% MulQkvProj. (2) For
+//   nearly every op, operand a barely varies (QKV a is p99 ±0.10), so on the a-axis
+//   each op_type collapses to a fixed dot or column and just repaints the same cells
+//   for tens of minutes — a static diagonal up front, a dead central streak in the
+//   tail. The diversity was in the data; the a-axis was averaging it away.
+//
+//   The real fast signal is k_pos, which bert.c reuses as the matmul output index
+//   (the i-index) on every non-attention op, sweeping 0..767 in real time as the op
+//   crawls its rows (verified: 768 distinct values; q_pos, by contrast, is only
+//   {0,1,2} — three ~27-min token zones). So x = k_pos across the full width and
+//   y = symMap(r). symMap is a FIXED symmetric-log over the real range (r∈[-33,23]):
+//   sign(r)·log1p(|r|/LIN) normalized, so each op_type settles at its own height —
+//   LnMeanAcc r≈-7 low, embedding/LnNorm r≈0 center, the 512 LnRsqrt r≈+20 flashing
+//   near the top — while every op reads as a horizontal comet sweeping left→right.
+//   The front LayerNorm bands and the QKV tail both stay alive. Still 100% real:
+//   the only op without a k_pos (LnRsqrt, 512 recs) falls back to symMap(a). No
+//   synthesis, no clock.
 //
 // WHY THE ATTENTION RAIN IS QUIET IN THESE CAPTURES (verified against bert.c):
 //   At install pace (1092 ops/sec) a 2-hour capture is exactly 7.86M ops — only
@@ -36,6 +57,19 @@ const REF_H = 600;
 
 const POS_NA = 0xffff;
 const OP_MUL_ATTN_QK = 10;
+const IDX_SPAN = 768; // BERT-base hidden size; k_pos (i-index) spans 0..767 on every op
+
+// Fixed symmetric-log mapping (replaces the QKV-dominated adaptive RMS scale).
+// symMap(v) = sign(v)·log1p(|v|/LIN) normalized to [-1, 1] over |v| ≤ ~35. The
+// log compresses the huge tail (LnMeanAcc ≈ -7, LnRsqrt ≈ +20, extremes to ±33)
+// while LIN keeps a near-linear region around the origin so the dense small-value
+// ops (embedding, QKV) still spread legibly instead of collapsing to one pixel.
+const SYMLOG_LIN = 0.4;
+const SYMLOG_MAX = Math.log1p(35 / SYMLOG_LIN);
+const FILL = 0.46; // grid fill factor: ±1 maps to ±FILL·N from center (edge margin)
+function symMap(v: number): number {
+  return (Math.sign(v) * Math.log1p(Math.abs(v) / SYMLOG_LIN)) / SYMLOG_MAX;
+}
 
 const Phase = { Embedding: 0, QKV: 1, Attention: 2, FFN: 3 } as const;
 type Phase = (typeof Phase)[keyof typeof Phase];
@@ -67,8 +101,6 @@ class Flash {
 export class ScreenRain {
   // cells_[x*N+y], x = a-axis, y = r-axis (matches the C++ index convention).
   private cells = new Float32Array(N * N);
-  private rmsA = 0.15; // running RMS of operand_a (seed from C++)
-  private rmsR = 0.012; // running RMS of result (seed from C++)
   private phase: Phase = Phase.QKV;
   private flash = new Flash();
 
@@ -96,18 +128,22 @@ export class ScreenRain {
       else if (ev.path === "/bert/layer") this.fireAxis2();
     }
 
-    // 2. Walk this frame's real ops: plot the canonical MulAttnQK (q,k) directly,
-    //    update phase from op_type, and gather (a, r) for the weight-space rain.
-    let sumA2 = 0;
-    let sumR2 = 0;
-    let nReal = 0;
-    const aBuf: number[] = [];
-    const rBuf: number[] = [];
+    // 2. Per-frame decay (§4) — runs before this frame's hits so trails fade even
+    //    in gaps while fresh hits stay at full brightness.
+    const cells = this.cells;
+    for (let i = 0; i < cells.length; i++) {
+      const v = cells[i] * DECAY;
+      cells[i] = v < CUTOFF ? 0 : v;
+    }
+
+    // 3. Walk this frame's real ops: plot the canonical MulAttnQK (q,k) directly,
+    //    update phase from op_type, then plot the rest. y is always symMap(r); x is
+    //    k_pos (the i-index sweep) for the QKV tail, else symMap(a).
     for (const rec of ops) {
       const qValid = (rec.flags & 1) !== 0 && rec.qPos !== POS_NA;
       const kValid = (rec.flags & 2) !== 0 && rec.kPos !== POS_NA;
       if (rec.opType === OP_MUL_ATTN_QK && qValid && kValid) {
-        if (rec.qPos < N && rec.kPos < N) this.cells[rec.qPos * N + rec.kPos] = 1.0;
+        if (rec.qPos < N && rec.kPos < N) cells[rec.qPos * N + rec.kPos] = 1.0;
         this.phase = Phase.Attention;
         continue; // attention recs paint at (q,k), not in (a,r) space
       }
@@ -117,40 +153,27 @@ export class ScreenRain {
       else if (ot <= 18) this.phase = Phase.Attention;
       else this.phase = Phase.FFN;
 
-      // Real operand/result → the weight-space cloud (replaces synthetic Gaussian).
-      const a = rec.a;
       const r = rec.r;
-      if (Number.isFinite(a) && Number.isFinite(r)) {
-        aBuf.push(a);
-        rBuf.push(r);
-        sumA2 += a * a;
-        sumR2 += r * r;
-        nReal++;
+      if (!Number.isFinite(r)) continue;
+      const y = clampI((symMap(r) * FILL + 0.5) * N, 0, N - 1);
+
+      // x = k_pos, the matmul output-dimension (i-index) that bert.c reuses on every
+      // non-attention op, sweeping 0..767 in real time as the op crawls its rows. So
+      // each op_type reads as a horizontal comet at its own r-height and the whole
+      // stream stays alive — both the front LayerNorm bands and the QKV tail. The
+      // lone op with no k_pos (LnRsqrt, 512 recs) falls back to its operand a.
+      let x: number;
+      if (kValid) {
+        x = clampI((rec.kPos / (IDX_SPAN - 1)) * (N - 1), 0, N - 1);
+      } else {
+        const a = rec.a;
+        if (!Number.isFinite(a)) continue;
+        x = clampI((symMap(a) * FILL + 0.5) * N, 0, N - 1);
       }
+      cells[x * N + y] = 1.0;
     }
 
-    // 3. Per-frame decay (§4) — runs every frame so trails fade even in gaps.
-    const cells = this.cells;
-    for (let i = 0; i < cells.length; i++) {
-      const v = cells[i] * DECAY;
-      cells[i] = v < CUTOFF ? 0 : v;
-    }
-
-    // 4. Plot the real (a, r) samples through the canonical adaptive scaling.
-    if (nReal > 0) {
-      // §5.2.3 running RMS (0.9 old / 0.1 new), §5.2.4 ±2σ ≈ 85% of grid.
-      this.rmsA = this.rmsA * 0.9 + Math.sqrt(sumA2 / nReal) * 0.1;
-      this.rmsR = this.rmsR * 0.9 + Math.sqrt(sumR2 / nReal) * 0.1;
-      const scaleA = (N * 0.3) / Math.max(0.005, this.rmsA);
-      const scaleR = (N * 0.3) / Math.max(0.005, this.rmsR);
-      for (let i = 0; i < nReal; i++) {
-        const x = clampI(aBuf[i] * scaleA + N * 0.5, 0, N - 1);
-        const y = clampI(rBuf[i] * scaleR + N * 0.5, 0, N - 1);
-        cells[x * N + y] = 1.0;
-      }
-    }
-
-    // 5. Advance the flash; wipe the grid at the hold→fade-out boundary (§7).
+    // 4. Advance the flash; wipe the grid at the hold→fade-out boundary (§7).
     if (this.flash.active()) {
       const prev = this.flash.elapsed;
       this.flash.elapsed += dt;

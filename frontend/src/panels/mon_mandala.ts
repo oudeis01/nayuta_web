@@ -95,7 +95,11 @@ export class MonMandala {
         const rNorm = q / maxQ; // 0..1
         const rc = rInner + rNorm * span;
         const r0 = Math.max(rInner, rc - ringT * 0.5);
-        const r1 = rc + ringT * 0.5;
+        // Clamp the outer edge to the disc: the rim ring (q=maxQ) sits at rc=rMax,
+        // and when maxQ is small ringT = span/maxQ balloons, so an unclamped
+        // r1 = rc + ringT/2 would shoot far past rMax and bleed into neighbouring
+        // panels on the shared canvas.
+        const r1 = Math.min(rMax, rc + ringT * 0.5);
         const c = Math.round(Math.pow(Math.min(1, v), GAMMA) * 255);
         ctx.fillStyle = `rgb(${c},${c},${c})`;
         ctx.beginPath();
