@@ -8,7 +8,7 @@ import { ResidualHelix, type HelixData } from "../geometry/residual_helix";
 // "=== LAYER n COMPLETE ===" then a brief pause + clear. Those axis paths are
 // absent from the Phase-1 captures, so that logic stays dormant here.
 //
-// The right 40% margin holds the residual-stream double helix (post-attn vs
+// The right half holds the residual-stream double helix (post-attn vs
 // post-FFN PCA coils — see geometry/residual_helix.ts); the scrolling log
 // occupies the left column. (This margin held the i-index sweep ribbon, and
 // before that the structural Helix Side view; the Helix now lives only on
@@ -156,8 +156,9 @@ export class MonOpStream {
     const bottom = y + h - 8 * s;
     const rows = Math.max(0, Math.floor((bottom - top) / lineH));
 
-    // Residual double helix in the right 40% margin (isolated canvas, fits itself).
-    const helixW = w * 0.4;
+    // Residual double helix in the right half (isolated canvas, fits + centres
+    // itself within this region). The log occupies the left column.
+    const helixW = w * 0.5;
     this.helix.draw(ctx, x + w - helixW, top, helixW, h - headerH - 8 * s);
 
     // Scrolling log in the left column; clip so long lines don't reach the helix.

@@ -265,11 +265,28 @@ export class MonScanner {
       ctx.font = `${fontMD}px ${mono}`;
       const rNorm = this.rEmaPeak > 0 ? this.rEma / this.rEmaPeak : 0;
       const boxH = fontMD + padY * 2;
+
+      // Scroll so the most recently embedded tokens stay visible. The sentence
+      // fills in over time as embeds trickle; once the wrapped lines overflow the
+      // sentence area we pin the bottom (newest) line to the area's bottom edge
+      // instead of clipping new rows away (user 2026-05-31). Clip to the area so
+      // partial rows cut cleanly.
+      const availH = dividerY - sentTop;
+      let contentBottom = 0;
+      for (let i = 0; i < this.layout.length; i++) {
+        const b = this.layout[i].y + boxH;
+        if (b > contentBottom) contentBottom = b;
+      }
+      const scrollY = Math.max(0, contentBottom - availH);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, sentTop, w, availH);
+      ctx.clip();
       for (let i = 0; i < this.layout.length; i++) {
         const tb = this.layout[i];
         const tx = tb.x;
-        const ty = sentTop + tb.y;
-        if (ty + boxH > dividerY) break; // clip to the sentence area
+        const ty = sentTop + tb.y - scrollY;
+        if (ty + boxH <= sentTop || ty >= dividerY) continue; // row off-screen
         if (i === this.qPos) {
           const breath = 0.88 + 0.12 * (0.5 + 0.5 * Math.sin(this.time * 1.8 + rNorm * 6.28));
           const fill = Math.round(255 * breath);
@@ -289,6 +306,7 @@ export class MonScanner {
           ctx.fillText(tb.disp, tx + 3 * s, ty + padY);
         }
       }
+      ctx.restore();
     }
 
     // Sub-progress bar (full width, just above the divider)

@@ -19,30 +19,50 @@
 // faithfully and on its own clock; the bert.c --residual-basis live path is kept
 // for the physical install / future long captures (user decision 2026-05-31).
 //
-// Animation (render model X): an intro DRAW-ON sweeps the coil into existence at
-// layer 0 (position 0..N), then the fully-revealed coil MORPHS through depth
-// L0 -> L11 and back, each point migrating in place to the next layer's
-// geometry. First/last layers separate the two strands; mid layers (5-7) nearly
-// merge them (the measured strand-separation profile), so divergence is data.
+// Animation (user revision 2026-05-31): ONE segment at a time. The layer's coil
+// is divided into SEG_COUNT contiguous segments; each is drawn ALONE in its true
+// position within the (whole-coil) frame, held still for a long beat, then
+// erased, then the next segment. Only ~30 samples are ever on screen at once, so
+// each piece can be read on its own rather than as a tangle. After the last
+// segment the layer steps L0 -> L11 and back (ping-pong) and segment 0 of the
+// next layer begins. Camera scale is fixed across a layer so each piece sits
+// where it belongs in the coil; the window appears to walk the coil piece by
+// piece.
 //
-// Camera (spin, tilt, orthographic, smoothed auto-fit) mirrors geometry/ribbon
-// so the panel reads as a sibling of the other monochrome wireframes.
+// Position 0 is dropped: BERT's first token is an attention-sink / massive-
+// activation outlier whose axis coord (c0) is several times larger than the rest
+// (e.g. L0 strand A pos0 c0=35.6 vs pos1 c0=3.4), which otherwise throws a long
+// straight spike off one end. It is not part of the smooth positional coil, so
+// the coil renders from position 1.
+//
+// Camera: slow 3D spin + fixed tilt, orthographic, with a spin-stable smoothed
+// auto-fit over the whole current-layer coil. The spin FREEZES while a segment
+// is actively drawing (so a stroke lands still), and turns only during the hold
+// and erase.
 
 const MAGIC = 0x52484c58;
 // c0 (PC1, the position axis) spans a wider range than c1/c2; scale the axis
 // down so the coil reads as an open helix rather than a thin needle. Cross-
 // section coords pass at gain 1; overall size is handled by auto-fit.
 const AXIS_GAIN = 0.26;
+// The two strands are pulled toward their per-position midpoint by this factor
+// (1 = true gap, <1 = tighter) so the double coil reads closer together without
+// distorting either strand's own shape.
+const STRAND_GAP = 0.7;
 const ALPHA_BANDS = 12; // gradient quantised into N strokes (cf. ribbon)
 
+// Segmented reveal. SEG_COUNT is the only knob for how the coil is chunked; it
+// is read live each frame, so it can be retuned with no other changes.
+const SEG_COUNT = 17; // segments per layer (~30 of ~509 points each)
+
 // Timeline (seconds). All driven by the panel's playback dt, independent of the
-// op-stream timeline (which barely advances). Tunable; visual review is the
-// user's. INTRO reveals positions; then DEVELOP morphs one layer step per
-// (MORPH + HOLD); at the top it ping-pongs back down so the coil always breathes
-// through depth without a hard reset.
-const INTRO_S = 6.0;
-const MORPH_S = 2.6;
-const HOLD_S = 0.8;
+// op-stream timeline. Per segment: SEG_DRAW_S to stroke it on (spin frozen),
+// SEG_HOLD_S to hold it still (the long study beat, >= 10s per the user), then
+// ERASE_S to recede it before the next segment. Tunable; visual review is the
+// user's.
+const SEG_DRAW_S = 0.5;
+const SEG_HOLD_S = 10.0;
+const ERASE_S = 0.8;
 
 export interface HelixData {
   nLayers: number;
@@ -69,12 +89,10 @@ export function parseHelixData(buf: ArrayBuffer): HelixData | null {
   return { nLayers, nPos, positions, a, f };
 }
 
-function lerp(p: number, q: number, t: number): number {
-  return p + (q - p) * t;
-}
+type Phase = "draw" | "hold" | "erase";
 
 export class ResidualHelix {
-  spinVel = 0.14; // slow turn so the coil reads as 3D (rad/s), sibling of Ribbon
+  spinVel = 0.035; // slow turn so the coil reads as 3D (rad/s); frozen while drawing
   tiltX = 0.34; // fixed camera tilt (rad)
 
   private data: HelixData | null = null;
@@ -82,68 +100,71 @@ export class ResidualHelix {
   private scaleSmooth = 0;
 
   // Animation clock.
-  private introT = 0; // 0..INTRO_S draw-on progress
-  private layer = 0; // integer base layer (explicit so morph frac never rounds it)
-  private depth = 0; // float layer position for rendering, 0..nLayers-1
-  private depthDir = 1; // ping-pong direction through depth
-  private stepT = 0; // 0..(MORPH_S+HOLD_S) within the current layer step
+  private layer = 0; // integer layer being shown
+  private depthDir = 1; // ping-pong direction through layers
+  private seg = 0; // current segment index 0..SEG_COUNT-1
+  private phase: Phase = "draw";
+  private phaseTimer = 0; // clock within the current phase
+  private segFrac = 0; // 0..1 reveal of the current segment (draw up, erase down)
 
   setData(d: HelixData | null): void {
     this.data = d;
   }
 
   update(dt: number): void {
-    this.spinAng += this.spinVel * dt;
-    if (!this.data) return;
+    const d = this.data;
+    if (!d) return;
+    const NL = d.nLayers;
+    if (NL < 1 || d.nPos < 3) return;
 
-    if (this.introT < INTRO_S) {
-      this.introT += dt;
-      return; // hold depth at 0 until the coil has drawn on
-    }
-
-    // Advance the per-layer step clock; each completed step commits one integer
-    // layer of travel, ping-ponging at the ends so the coil migrates up then
-    // back down. `layer` is kept as an explicit integer so the morph fraction
-    // can never round it forward mid-step.
-    const NL = this.data.nLayers;
-    if (NL <= 1) return;
-    this.stepT += dt;
-    const step = MORPH_S + HOLD_S;
-    while (this.stepT >= step) {
-      this.stepT -= step;
-      this.layer += this.depthDir;
-      if (this.layer >= NL - 1) {
-        this.layer = NL - 1;
-        this.depthDir = -1;
-      } else if (this.layer <= 0) {
-        this.layer = 0;
-        this.depthDir = 1;
+    let drawing = false;
+    if (this.phase === "draw") {
+      drawing = true;
+      this.phaseTimer += dt;
+      this.segFrac = Math.min(1, this.phaseTimer / SEG_DRAW_S);
+      if (this.segFrac >= 1) {
+        this.phase = "hold";
+        this.phaseTimer = 0;
+      }
+    } else if (this.phase === "hold") {
+      this.segFrac = 1;
+      this.phaseTimer += dt;
+      if (this.phaseTimer >= SEG_HOLD_S) {
+        this.phase = "erase";
+        this.phaseTimer = 0;
+      }
+    } else {
+      // erase: recede this segment, then advance to the next (or next layer).
+      this.phaseTimer += dt;
+      this.segFrac = Math.max(0, 1 - this.phaseTimer / ERASE_S);
+      if (this.phaseTimer >= ERASE_S) {
+        this.seg++;
+        if (this.seg >= SEG_COUNT) {
+          this.seg = 0;
+          this.layer += this.depthDir;
+          if (this.layer >= NL - 1) {
+            this.layer = NL - 1;
+            this.depthDir = -1;
+          } else if (this.layer <= 0) {
+            this.layer = 0;
+            this.depthDir = 1;
+          }
+        }
+        this.phase = "draw";
+        this.phaseTimer = 0;
+        this.segFrac = 0;
       }
     }
-    // depth = base layer + eased morph toward the next layer over the MORPH
-    // portion of the step (the HOLD portion sits flat at the integer layer).
-    const frac = Math.min(1, this.stepT / MORPH_S);
-    const target = Math.max(0, Math.min(NL - 1, this.layer + this.depthDir));
-    this.depth = this.layer + (target - this.layer) * frac;
+
+    if (!drawing) this.spinAng += this.spinVel * dt; // spin only when not stroking
   }
 
-  // Coords of strand (0=a,1=f) at layer L, position index pi, morphed to L+dir.
-  private coord(
-    strand: 0 | 1,
-    pi: number,
-    L0: number,
-    L1: number,
-    frac: number,
-  ): [number, number, number] {
+  // Coords of strand (0=a,1=f) at layer L, position index pi.
+  private coord(strand: 0 | 1, pi: number, L: number): [number, number, number] {
     const d = this.data!;
     const arr = strand === 0 ? d.a : d.f;
-    const o0 = (L0 * d.nPos + pi) * 3;
-    const o1 = (L1 * d.nPos + pi) * 3;
-    return [
-      lerp(arr[o0], arr[o1], frac),
-      lerp(arr[o0 + 1], arr[o1 + 1], frac),
-      lerp(arr[o0 + 2], arr[o1 + 2], frac),
-    ];
+    const o = (L * d.nPos + pi) * 3;
+    return [arr[o], arr[o + 1], arr[o + 2]];
   }
 
   // Project a coil point (axis = vertical Y) with spin + tilt, orthographic.
@@ -172,29 +193,56 @@ export class ResidualHelix {
     const d = this.data;
     if (!d) return;
     const P = d.nPos;
+    if (P < 3) return;
+    const L = this.layer;
 
-    // Draw-on cursor: positions 0..reveal are shown (full once intro completes).
-    const reveal =
-      this.introT >= INTRO_S
-        ? P
-        : Math.max(2, Math.floor((this.introT / INTRO_S) * P));
-    const last = Math.min(reveal, P) - 1;
-    if (last < 1) return;
+    // Current segment's position span (position 0 dropped, so pi runs 1..P-1).
+    const Ne = P - 1;
+    const segSize = Math.max(1, Math.ceil(Ne / SEG_COUNT));
+    const segStartPi = 1 + this.seg * segSize;
+    const segEndPi = Math.min(P - 1, this.seg * segSize + segSize);
+    if (segStartPi > P - 1) return;
+    const span = segEndPi - segStartPi;
+    // Draw grows the head forward (start -> end). Erase eats from the START
+    // forward, leaving the END point as the anchor the next segment grows from,
+    // so the active point always moves forward and never backtracks.
+    let fromPi: number;
+    let toPi: number;
+    if (this.phase === "erase") {
+      fromPi = segStartPi + Math.floor((1 - this.segFrac) * span);
+      toPi = segEndPi;
+    } else {
+      fromPi = segStartPi;
+      toPi = segStartPi + Math.floor(this.segFrac * span);
+    }
 
-    const L0 = Math.floor(this.depth);
-    const L1 = Math.min(d.nLayers - 1, L0 + 1);
-    const frac = this.depth - L0;
-
-    // Build both strands' 3D coords, find axial centre, then project.
-    const A: [number, number, number][] = new Array(last + 1);
-    const F: [number, number, number][] = new Array(last + 1);
+    // Contract both strands toward their per-position midpoint (STRAND_GAP) so
+    // the coils sit closer, and track the axial centre over the WHOLE current-
+    // layer coil so the frame sits still as the window walks it piece by piece.
+    const ca3: [number, number, number][] = new Array(P);
+    const cf3: [number, number, number][] = new Array(P);
     let ymin = Infinity;
     let ymax = -Infinity;
-    for (let i = 0; i <= last; i++) {
-      A[i] = this.coord(0, i, L0, L1, frac);
-      F[i] = this.coord(1, i, L0, L1, frac);
-      const ya = A[i][0] * AXIS_GAIN;
-      const yf = F[i][0] * AXIS_GAIN;
+    for (let pi = 1; pi < P; pi++) {
+      const a3 = this.coord(0, pi, L);
+      const f3 = this.coord(1, pi, L);
+      const mx = (a3[0] + f3[0]) * 0.5;
+      const my = (a3[1] + f3[1]) * 0.5;
+      const mz = (a3[2] + f3[2]) * 0.5;
+      const ai: [number, number, number] = [
+        mx + (a3[0] - mx) * STRAND_GAP,
+        my + (a3[1] - my) * STRAND_GAP,
+        mz + (a3[2] - mz) * STRAND_GAP,
+      ];
+      const fi: [number, number, number] = [
+        mx + (f3[0] - mx) * STRAND_GAP,
+        my + (f3[1] - my) * STRAND_GAP,
+        mz + (f3[2] - mz) * STRAND_GAP,
+      ];
+      ca3[pi] = ai;
+      cf3[pi] = fi;
+      const ya = ai[0] * AXIS_GAIN;
+      const yf = fi[0] * AXIS_GAIN;
       if (ya < ymin) ymin = ya;
       if (ya > ymax) ymax = ya;
       if (yf < ymin) ymin = yf;
@@ -202,18 +250,19 @@ export class ResidualHelix {
     }
     const yCenter = (ymin + ymax) * 0.5;
 
-    const pa: [number, number][] = new Array(last + 1);
-    const pf: [number, number][] = new Array(last + 1);
+    // Project the whole coil (stable whole-coil auto-fit), keep for rendering.
+    const pa: [number, number][] = new Array(P);
+    const pf: [number, number][] = new Array(P);
     let halfw = 1e-3;
     let halfh = 1e-3;
-    for (let i = 0; i <= last; i++) {
-      pa[i] = this.project(A[i], yCenter);
-      pf[i] = this.project(F[i], yCenter);
-      halfw = Math.max(halfw, Math.abs(pa[i][0]), Math.abs(pf[i][0]));
-      halfh = Math.max(halfh, Math.abs(pa[i][1]), Math.abs(pf[i][1]));
+    for (let pi = 1; pi < P; pi++) {
+      pa[pi] = this.project(ca3[pi], yCenter);
+      pf[pi] = this.project(cf3[pi], yCenter);
+      halfw = Math.max(halfw, Math.abs(pa[pi][0]), Math.abs(pf[pi][0]));
+      halfh = Math.max(halfh, Math.abs(pa[pi][1]), Math.abs(pf[pi][1]));
     }
 
-    const fill = 0.8;
+    const fill = 0.9; // bolder use of the right-half region
     const targetScale = fill * Math.min((w * 0.5) / halfw, (h * 0.5) / halfh);
     this.scaleSmooth =
       this.scaleSmooth <= 0
@@ -225,22 +274,33 @@ export class ResidualHelix {
     const mapX = (x: number): number => cx0 + x * scale;
     const mapY = (y: number): number => cy0 + y * scale;
 
-    // Two open strands. Alpha ramps low-pos (dim) -> high-pos (bright) in
-    // ALPHA_BANDS contiguous strokes. Strand F (layer output) is a touch brighter
-    // so the coils read apart in the monochrome palette.
-    ctx.lineWidth = 1;
-    const strokeStrand = (proj: [number, number][], aGain: number): void => {
-      let i = 1;
-      while (i <= last) {
-        const band = Math.min(ALPHA_BANDS - 1, Math.floor((i / last) * ALPHA_BANDS));
-        const a = (0.08 + 0.62 * ((band + 0.5) / ALPHA_BANDS)) * aGain;
+    // Device-ish scale so weight tracks panel size. Lines are 2x the old 1px;
+    // every revealed sample gets a small dot to show the discretisation.
+    const dpx = Math.max(1, h / 520);
+    ctx.lineWidth = 1; // back to the original thin stroke (user 2026-05-31)
+    const dotR = 1.3 * dpx;
+    const headR = 2.2 * dpx;
+    const denom = P - 1;
+
+    // Stroke + square-mark the revealed range [lo..hi]. Squares (not discs) to
+    // match the project's wireframe vocabulary.
+    const strokeStrand = (
+      proj: [number, number][],
+      aGain: number,
+      lo: number,
+      hi: number,
+    ): void => {
+      let i = lo + 1;
+      while (i <= hi) {
+        const band = Math.min(ALPHA_BANDS - 1, Math.floor(((i - 1) / denom) * ALPHA_BANDS));
+        const a = (0.1 + 0.62 * ((band + 0.5) / ALPHA_BANDS)) * aGain;
         ctx.strokeStyle = `rgba(225,225,225,${a})`;
         ctx.beginPath();
         ctx.moveTo(mapX(proj[i - 1][0]), mapY(proj[i - 1][1]));
         let j = i;
         while (
-          j <= last &&
-          Math.min(ALPHA_BANDS - 1, Math.floor((j / last) * ALPHA_BANDS)) === band
+          j <= hi &&
+          Math.min(ALPHA_BANDS - 1, Math.floor(((j - 1) / denom) * ALPHA_BANDS)) === band
         ) {
           ctx.lineTo(mapX(proj[j][0]), mapY(proj[j][1]));
           j++;
@@ -248,13 +308,22 @@ export class ResidualHelix {
         ctx.stroke();
         i = j;
       }
-      const head = proj[last];
+      // A small square at every revealed sample.
+      for (let pi = lo; pi <= hi; pi++) {
+        const band = Math.min(ALPHA_BANDS - 1, Math.floor((pi / denom) * ALPHA_BANDS));
+        const a = (0.1 + 0.62 * ((band + 0.5) / ALPHA_BANDS)) * aGain;
+        ctx.fillStyle = `rgba(225,225,225,${Math.min(1, a * 1.3)})`;
+        ctx.fillRect(mapX(proj[pi][0]) - dotR, mapY(proj[pi][1]) - dotR, dotR * 2, dotR * 2);
+      }
+      // Brighter square head at the forward-most sample (toPi). During erase toPi
+      // stays at the segment end, so the leading marker never backtracks and the
+      // next segment continues from there.
+      const head = proj[toPi];
       ctx.fillStyle = `rgba(245,245,245,${0.95 * aGain})`;
-      ctx.beginPath();
-      ctx.arc(mapX(head[0]), mapY(head[1]), 1.8, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(mapX(head[0]) - headR, mapY(head[1]) - headR, headR * 2, headR * 2);
     };
-    strokeStrand(pa, 0.78 * baseAlpha);
-    strokeStrand(pf, 1.0 * baseAlpha);
+    // Strand F (layer output) a touch brighter so the coils read apart.
+    strokeStrand(pa, 0.78 * baseAlpha, fromPi, toPi);
+    strokeStrand(pf, 1.0 * baseAlpha, fromPi, toPi);
   }
 }
