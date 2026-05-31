@@ -1,5 +1,5 @@
 import { decompress } from "fzstd";
-import type { EventStream, OscEvent, OpRec } from "./types";
+import type { EventStream, OscEvent, OpRec, ResidualRec } from "./types";
 
 // Replays a captured session from its zstd-compressed event log.
 //
@@ -23,6 +23,11 @@ import type { EventStream, OscEvent, OpRec } from "./types";
 //   [ts_ns: u64 LE][len: u32 LE][payload: len bytes]
 // where each payload is one ZMQ OpMsg:
 //   [base_op_count: u64][count: u16][version: u16][reserved: u32] then count×OpRec(24B)
+// `reserved` is a msg_type discriminator: 0 = OpMsg (24B records), 1 = ResidualMsg
+// (16B ResidualRec records). Residual frames appear only in captures made with
+// bert --residual-basis; older captures contain only OpMsg frames (reserved 0).
+const MSG_RESIDUAL = 1;
+
 interface OpFrame {
   tsNs: number;
   recOff: number; // byte offset of records[0] within opsRaw
@@ -30,9 +35,18 @@ interface OpFrame {
   base: number; // global op_count of records[0]
 }
 
+// Residual frames carry no op_count semantics (timeline only), so we keep just
+// the offset and count; records are a flat 16-byte layout.
+interface ResFrame {
+  tsNs: number;
+  recOff: number;
+  count: number;
+}
+
 export class DumpAdapter implements EventStream {
   private oscHandlers: ((ev: OscEvent) => void)[] = [];
   private opHandlers: ((rec: OpRec) => void)[] = [];
+  private resHandlers: ((rec: ResidualRec) => void)[] = [];
 
   private events: OscEvent[] = [];
   private idx = 0;
@@ -47,6 +61,8 @@ export class DumpAdapter implements EventStream {
   private opsView?: DataView;
   private frames: OpFrame[] = [];
   private frameIdx = 0;
+  private resFrames: ResFrame[] = [];
+  private resFrameIdx = 0;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
@@ -57,6 +73,9 @@ export class DumpAdapter implements EventStream {
   }
   onOpRec(handler: (rec: OpRec) => void): void {
     this.opHandlers.push(handler);
+  }
+  onResidualRec(handler: (rec: ResidualRec) => void): void {
+    this.resHandlers.push(handler);
   }
   setPlaybackSpeed(x: number): void {
     this.speed = Math.max(0, x);
@@ -126,6 +145,7 @@ export class DumpAdapter implements EventStream {
     const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
 
     const frames: OpFrame[] = [];
+    const resFrames: ResFrame[] = [];
     let off = 0;
     while (off + 12 <= raw.length) {
       const tsNs = dv.getUint32(off, true) + dv.getUint32(off + 4, true) * 4294967296;
@@ -134,15 +154,26 @@ export class DumpAdapter implements EventStream {
       if (off + len > raw.length || len < 16) break;
       const base = dv.getUint32(off, true) + dv.getUint32(off + 4, true) * 4294967296;
       const declared = dv.getUint16(off + 8, true);
-      const capacity = Math.floor((len - 16) / 24);
-      frames.push({ tsNs, recOff: off + 16, count: Math.min(declared, capacity), base });
+      const msgType = dv.getUint32(off + 12, true);
+      if (msgType === MSG_RESIDUAL) {
+        const capacity = Math.floor((len - 16) / 16);
+        resFrames.push({ tsNs, recOff: off + 16, count: Math.min(declared, capacity) });
+      } else {
+        // MSG_OP (0) or any unknown type defaults to the op layout, matching
+        // older captures whose reserved field was always 0.
+        const capacity = Math.floor((len - 16) / 24);
+        frames.push({ tsNs, recOff: off + 16, count: Math.min(declared, capacity), base });
+      }
       off += len;
     }
     frames.sort((a, b) => a.tsNs - b.tsNs);
+    resFrames.sort((a, b) => a.tsNs - b.tsNs);
     this.opsRaw = raw;
     this.opsView = dv;
     this.frames = frames;
     this.frameIdx = 0;
+    this.resFrames = resFrames;
+    this.resFrameIdx = 0;
   }
 
   // Decode one 24-byte OpRec at byte offset p, reconstructing the record's
@@ -166,6 +197,20 @@ export class DumpAdapter implements EventStream {
     };
   }
 
+  // Decode one 16-byte ResidualRec at byte offset p.
+  //   layer u8 | strand u8 | q_pos u16 | c0 f32 | c1 f32 | c2 f32
+  private readResidual(p: number): ResidualRec {
+    const dv = this.opsView!;
+    return {
+      layer: this.opsRaw![p],
+      strand: this.opsRaw![p + 1],
+      qPos: dv.getUint16(p + 2, true),
+      c0: dv.getFloat32(p + 4, true),
+      c1: dv.getFloat32(p + 8, true),
+      c2: dv.getFloat32(p + 12, true),
+    };
+  }
+
   // Advance playback by one frame; returns the playback dt (seconds) so the
   // host can drive panel animations at the same rate as event delivery.
   advance(realDt: number): number {
@@ -186,6 +231,19 @@ export class DumpAdapter implements EventStream {
         const rec = this.readOp(p, fr.base);
         for (const h of this.opHandlers) h(rec);
         p += 24;
+      }
+    }
+    // Residual frames share the same playback timeline; fire after op records.
+    while (
+      this.resFrameIdx < this.resFrames.length &&
+      this.resFrames[this.resFrameIdx].tsNs <= cutoff
+    ) {
+      const fr = this.resFrames[this.resFrameIdx++];
+      let p = fr.recOff;
+      for (let i = 0; i < fr.count; i++) {
+        const rec = this.readResidual(p);
+        for (const h of this.resHandlers) h(rec);
+        p += 16;
       }
     }
     return pdt;

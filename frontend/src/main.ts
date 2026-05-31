@@ -8,6 +8,7 @@ import { ScreenRain } from "./panels/screen_rain";
 import { MonMandala } from "./panels/mon_mandala";
 import { MonEntropy } from "./panels/mon_entropy";
 import { AudioEngine } from "./audio/engine";
+import { parseHelixData, type HelixData } from "./geometry/residual_helix";
 import type { OscEvent, OpRec } from "./stream/types";
 
 const SESSION = "session_001";
@@ -151,6 +152,9 @@ window.addEventListener("resize", resize);
 // every freshly built panel.
 let lemmaDict: Record<string, string> = {};
 let bertVocab: string[] = [];
+// The residual double-helix mean manifold (residual_means.bin) is model-wide,
+// so load it once and hand it to the op-stream panel built for each tag.
+let residualMeans: HelixData | null = null;
 
 let adapter: DumpAdapter;
 let topPanel: Panel | null = null; // Screen 0, the full-width top band
@@ -188,6 +192,7 @@ async function loadTag(tag: string) {
   const scanner = new MonScanner();
   scanner.setVocab(bertVocab);
   const opstream = new MonOpStream();
+  opstream.setHelixData(residualMeans);
   const clock = new MonClock();
   const whisper = new MonWhisper();
   whisper.setLemmaDict(lemmaDict);
@@ -398,6 +403,9 @@ Promise.all([
   fetch("/bert_vocab.txt")
     .then((r) => (r.ok ? r.text() : ""))
     .then((t) => (bertVocab = t.split("\n"))),
+  fetch("/residual_means.bin")
+    .then((r) => (r.ok ? r.arrayBuffer() : null))
+    .then((b) => (residualMeans = b ? parseHelixData(b) : null)),
 ])
   .then(() => loadTag(TAGS[0]))
   .then(() => requestAnimationFrame(frame));
