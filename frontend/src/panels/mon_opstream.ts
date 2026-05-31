@@ -1,5 +1,5 @@
 import type { OscEvent, OpRec } from "../stream/types";
-import { Helix } from "../geometry/helix";
+import { Ribbon } from "../geometry/ribbon";
 
 // Monitor B — Op Stream. Faithful port of graphics_consumer/src/screens/
 // mon_opstream.cpp. Every captured OpRec (~1,092/s, already rate-limited at the
@@ -8,9 +8,10 @@ import { Helix } from "../geometry/helix";
 // "=== LAYER n COMPLETE ===" then a brief pause + clear. Those axis paths are
 // absent from the Phase-1 captures, so that logic stays dormant here.
 //
-// The right 40% margin holds the structural helix (Side view); the scrolling log
-// occupies the left column. The helix energy (jitter amplitude) tracks the EMA of
-// |r| over the op stream, exactly as the C++ panel does.
+// The right 40% margin holds the i-index sweep ribbon (an open, growing spiral
+// of the matmul output index — see geometry/ribbon.ts); the scrolling log
+// occupies the left column. (This margin used to hold the structural Helix Side
+// view; the Helix now lives only on Monitor A, user decision 2026-05-31.)
 
 const REF_H = 600;
 const LH_NA = 0xff;
@@ -72,10 +73,8 @@ export class MonOpStream {
   private pauseTimer = 0;
   private blink = 0;
 
-  // Background helix (right margin) + its |r| EMA energy source.
-  private helix = new Helix();
-  private rEma = 0;
-  private rEmaPeak = 0;
+  // Background i-index sweep ribbon (right margin), fed the raw op stream.
+  private ribbon = new Ribbon();
 
   private push(text: string, sepWeak = false, sepStrong = false): void {
     this.log.push({ text, sepWeak, sepStrong });
@@ -97,15 +96,8 @@ export class MonOpStream {
   update(events: OscEvent[], ops: OpRec[], dt: number): void {
     this.blink += dt;
 
-    // Helix background updates regardless of the log pause (C++ parity). Energy
-    // = EMA of |r| normalized to its running peak, mapped to [0.6, 2.4].
-    for (const r of ops) {
-      const ar = Math.abs(r.r);
-      this.rEma = this.rEma * 0.99 + ar * 0.01;
-      if (this.rEma > this.rEmaPeak) this.rEmaPeak = this.rEma;
-    }
-    const energy = this.rEmaPeak > 0 ? 0.6 + 1.8 * (this.rEma / this.rEmaPeak) : 1.0;
-    this.helix.update(events, dt, energy);
+    // Ribbon background grows from the raw op stream regardless of the log pause.
+    this.ribbon.update(ops, dt);
 
     if (this.paused) {
       this.pauseTimer -= dt;
@@ -158,12 +150,12 @@ export class MonOpStream {
     const bottom = y + h - 8 * s;
     const rows = Math.max(0, Math.floor((bottom - top) / lineH));
 
-    // Structural helix in the right 40% margin (isolated canvas, fits itself).
-    const helixW = w * 0.4;
-    this.helix.draw(ctx, x + w - helixW, top, helixW, h - headerH - 8 * s, "side");
+    // i-index sweep ribbon in the right 40% margin (isolated canvas, fits itself).
+    const ribbonW = w * 0.4;
+    this.ribbon.draw(ctx, x + w - ribbonW, top, ribbonW, h - headerH - 8 * s);
 
-    // Scrolling log in the left column; clip so long lines don't reach the helix.
-    const logW = w - helixW - 16 * s;
+    // Scrolling log in the left column; clip so long lines don't reach the ribbon.
+    const logW = w - ribbonW - 16 * s;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, top, logW, bottom - top);

@@ -27,6 +27,100 @@ function clampf(x: number, lo: number, hi: number): number {
   return x < lo ? lo : x > hi ? hi : x;
 }
 
+// ── Self-drawing route (draw-on animation, user decision 2026-05-31) ──────────
+// The helix data is full from the start (authentic; we never fake growth). The
+// draw-on is a *rendering* flourish: a single pen traces the ENTIRE wireframe in
+// one continuous stroke, periodically, so the cylinder visibly wires itself up.
+//
+// "One stroke covering every edge" = an Eulerian circuit. The wireframe (144
+// vertices = 12 rings × 12 heads; ring edges cyclic in h, strand edges between
+// adjacent layers) has 24 odd-degree vertices (all of the two end rings, degree
+// 3), so a pure Eulerian path is impossible. We make every degree even by
+// DOUBLING 12 ring edges (adjacent pairs on each end ring); those 12 of 276 edges
+// get traced twice, which is visually invisible. Hierholzer then yields a circuit
+// through all edges. Different neighbour-ordering / start policies give visually
+// distinct "drawings" (FAMILIES) that we cycle on each heartbeat trigger.
+interface HEdge {
+  to: number;
+  id: number;
+}
+function buildHelixGraph(nLayers: number, nHeads: number): { adj: HEdge[][]; edgeCount: number } {
+  const V = nLayers * nHeads;
+  const adj: HEdge[][] = Array.from({ length: V }, () => []);
+  let id = 0;
+  const add = (a: number, b: number): void => {
+    adj[a].push({ to: b, id });
+    adj[b].push({ to: a, id });
+    id++;
+  };
+  // ring edges: head h ↔ h+1 (mod nHeads) within each layer
+  for (let L = 0; L < nLayers; L++)
+    for (let h = 0; h < nHeads; h++) add(L * nHeads + h, L * nHeads + ((h + 1) % nHeads));
+  // strand edges: (L,h) ↔ (L+1,h)
+  for (let L = 0; L < nLayers - 1; L++)
+    for (let h = 0; h < nHeads; h++) add(L * nHeads + h, (L + 1) * nHeads + h);
+  // double 12 ring edges on the two end rings → all degrees even
+  for (const L of [0, nLayers - 1])
+    for (let h = 0; h < nHeads; h += 2) add(L * nHeads + h, L * nHeads + ((h + 1) % nHeads));
+  return { adj, edgeCount: id };
+}
+function isRingEdge(from: number, to: number, nHeads: number): boolean {
+  return Math.floor(from / nHeads) === Math.floor(to / nHeads);
+}
+// Hierholzer with a per-policy neighbour ordering. Returns a vertex sequence of
+// length edgeCount+1 visiting every (multi)edge exactly once.
+function eulerCircuit(
+  adj: HEdge[][],
+  edgeCount: number,
+  start: number,
+  ringFirst: boolean,
+  ascendTo: boolean,
+  nHeads: number,
+): number[] {
+  const order: HEdge[][] = adj.map((lst, v) =>
+    lst.slice().sort((a, b) => {
+      const ra = isRingEdge(v, a.to, nHeads) ? 0 : 1;
+      const rb = isRingEdge(v, b.to, nHeads) ? 0 : 1;
+      const ka = ringFirst ? ra : 1 - ra;
+      const kb = ringFirst ? rb : 1 - rb;
+      if (ka !== kb) return ka - kb;
+      return ascendTo ? a.to - b.to : b.to - a.to;
+    }),
+  );
+  const used = new Uint8Array(edgeCount);
+  const ptr = new Int32Array(adj.length);
+  const stack: number[] = [start];
+  const out: number[] = [];
+  while (stack.length) {
+    const v = stack[stack.length - 1];
+    let advanced = false;
+    while (ptr[v] < order[v].length) {
+      const e = order[v][ptr[v]++];
+      if (used[e.id]) continue;
+      used[e.id] = 1;
+      stack.push(e.to);
+      advanced = true;
+      break;
+    }
+    if (!advanced) out.push(stack.pop()!);
+  }
+  return out.reverse();
+}
+// 6 visually distinct families (policy × start), plus reverses for cheap variety.
+function buildHelixRoutes(nLayers: number, nHeads: number): number[][] {
+  const { adj, edgeCount } = buildHelixGraph(nLayers, nHeads);
+  const mid = Math.floor(nLayers / 2) * nHeads + Math.floor(nHeads / 2);
+  const last = nLayers * nHeads - 1;
+  const specs: Array<[number, boolean, boolean]> = [
+    [0, true, true], // ring-major, ascending, from bottom
+    [0, false, true], // strand-major, ascending, from bottom
+    [mid, true, false], // ring-major, descending, from middle
+    [last, false, true], // strand-major, ascending, from top
+  ];
+  const base = specs.map(([s, rf, asc]) => eulerCircuit(adj, edgeCount, s, rf, asc, nHeads));
+  return [base[0], base[1], base[2], base[3], base[0].slice().reverse(), base[1].slice().reverse()];
+}
+
 export class Helix {
   // Live-tunable knobs (match the C++ defaults).
   twist = 0.18; // baseline helical phase advance per unit z
@@ -48,9 +142,31 @@ export class Helix {
   private kickRingCursor = 0;
   private scaleSmooth = 0;
 
+  // Draw-on self-construction (lazy-built routes; cycles family on each heartbeat).
+  drawDur = 2.4; // seconds for one full-wireframe stroke
+  morphDur = 0.9; // seconds to settle from the platonic cylinder to the real shape
+  private routes: number[][] | null = null;
+  private familyIdx = 0;
+  private drawT = 0; // elapsed within the current stroke
+  private drawing = true; // self-draw once on load, then on every heartbeat
+  // morph 0 = platonic cylinder (uniform radius, regular rings); 1 = real conc shape.
+  // The stroke draws the ideal cylinder; once complete, the form warps into the
+  // data-driven (dented) shape. Starts at the platonic ideal on load.
+  private morph = 0;
+  private morphT = 0;
+
   constructor() {
     this.twistCur = this.twist;
     this.regenAll();
+  }
+
+  private startDraw(): void {
+    if (!this.routes) this.routes = buildHelixRoutes(NLAYERS, NHEADS);
+    this.familyIdx = (this.familyIdx + 1) % this.routes.length;
+    this.drawT = 0;
+    this.drawing = true;
+    this.morph = 0; // redraw the platonic ideal, then warp to real again
+    this.morphT = 0;
   }
 
   private regenAll(): void {
@@ -115,6 +231,20 @@ export class Helix {
       this.regenRing(this.kickRingCursor % NLAYERS);
       this.kickRingCursor++;
       this.fireKick(this.kick);
+      this.startDraw(); // heartbeat retriggers the self-construction stroke
+    }
+
+    // Advance the draw-on stroke; when it completes, warp from the platonic
+    // cylinder to the real data-driven shape, then hold.
+    if (this.drawing) {
+      this.drawT += dt;
+      if (this.drawT >= this.drawDur) {
+        this.drawing = false;
+        this.morphT = 0;
+      }
+    } else if (this.morph < 1) {
+      this.morphT += dt;
+      this.morph = clampf(this.morphT / this.morphDur, 0, 1);
     }
 
     this.jitter(energy);
@@ -138,7 +268,11 @@ export class Helix {
   private vertex(L: number, h: number, conc: number): [number, number, number] {
     const z = (L - (NLAYERS - 1) / 2.0) * LAYER_GAP;
     const th = h * ((2.0 * Math.PI) / NHEADS) + this.twistCur * z;
-    const rad = R0 * (RMIN + (1.0 - RMIN) * conc);
+    // morph 0 → concEff = 1 (uniform max radius = regular cylinder); morph 1 →
+    // the real per-head conc (the dented data shape). The twist is kept in both
+    // so the platonic form is the clean (slightly twisted) cylinder.
+    const concEff = 1.0 + (conc - 1.0) * this.morph;
+    const rad = R0 * (RMIN + (1.0 - RMIN) * concEff);
     return [rad * Math.cos(th), rad * Math.sin(th), z];
   }
 
@@ -230,6 +364,52 @@ export class Helix {
     const cy0 = oy + h * 0.5;
     const mapX = (px: number) => cx0 + px * scale;
     const mapY = (py: number) => cy0 + py * scale;
+
+    // Draw-on: while a stroke is in progress (and the helix is full, which it
+    // always is in these captures), trace the single-stroke route from black so
+    // the cylinder visibly wires itself up. Otherwise hold the full wireframe.
+    if (this.drawing && active === NLAYERS - 1) {
+      if (!this.routes) this.routes = buildHelixRoutes(NLAYERS, NHEADS);
+      const seq = this.routes[this.familyIdx];
+      const segTotal = seq.length - 1;
+      const p = clampf(this.drawT / this.drawDur, 0, 1);
+      const eased = 1 - (1 - p) * (1 - p); // ease-out
+      const drawn = eased * segTotal;
+      const fullSeg = Math.floor(drawn);
+      const frac = drawn - fullSeg;
+
+      // The traced body so far, dim. Plus a partial leading segment.
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(220,220,220,${0.5 * baseAlpha})`;
+      ctx.beginPath();
+      ctx.moveTo(mapX(rx[seq[0]]), mapY(ry[seq[0]]));
+      for (let i = 1; i <= fullSeg; i++) ctx.lineTo(mapX(rx[seq[i]]), mapY(ry[seq[i]]));
+      let headX: number;
+      let headY: number;
+      if (fullSeg < segTotal) {
+        const ax = mapX(rx[seq[fullSeg]]);
+        const ay = mapY(ry[seq[fullSeg]]);
+        const bx = mapX(rx[seq[fullSeg + 1]]);
+        const by = mapY(ry[seq[fullSeg + 1]]);
+        headX = ax + (bx - ax) * frac;
+        headY = ay + (by - ay) * frac;
+        ctx.lineTo(headX, headY);
+      } else {
+        headX = mapX(rx[seq[segTotal]]);
+        headY = mapY(ry[seq[segTotal]]);
+      }
+      ctx.stroke();
+
+      // Bright comet head over the last few segments.
+      const tailStart = Math.max(0, fullSeg - 6);
+      ctx.strokeStyle = `rgba(245,245,245,${0.95 * baseAlpha})`;
+      ctx.beginPath();
+      ctx.moveTo(mapX(rx[seq[tailStart]]), mapY(ry[seq[tailStart]]));
+      for (let i = tailStart + 1; i <= fullSeg; i++) ctx.lineTo(mapX(rx[seq[i]]), mapY(ry[seq[i]]));
+      ctx.lineTo(headX, headY);
+      ctx.stroke();
+      return;
+    }
 
     // Strands (head h, L=0..active) — dim helical lines.
     ctx.lineWidth = 1;
