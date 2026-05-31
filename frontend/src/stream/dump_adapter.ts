@@ -79,6 +79,20 @@ export class DumpAdapter implements EventStream {
     return this.idx >= this.events.length;
   }
 
+  // The main (lid,vidx) of the first `limit` /bert/whisper events, in fire order.
+  // Used to prefetch the opening utterances' audio (action plan §7-6). Neighbor
+  // voices are omitted — they trail the main voice by an IOI, so lazy-loading
+  // them adds no perceptible stall.
+  firstWhisperPairs(limit: number): [number, number][] {
+    const out: [number, number][] = [];
+    for (const ev of this.events) {
+      if (ev.path !== "/bert/whisper") continue;
+      out.push([ev.args[0] | 0, ev.args[1] | 0]);
+      if (out.length >= limit) break;
+    }
+    return out;
+  }
+
   async load(opts: { ops?: boolean } = {}): Promise<void> {
     const res = await fetch(`${this.baseUrl}/events.jsonl.zst`);
     if (!res.ok) throw new Error(`fetch ${this.baseUrl}: ${res.status}`);

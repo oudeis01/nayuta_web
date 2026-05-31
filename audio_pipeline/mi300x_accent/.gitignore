@@ -4,6 +4,9 @@ dist/
 ab_samples/
 # On-instance outputs / logs (never on this workstation, but guard anyway)
 out_accent/
+# Locally encoded opus output + any transfer tarball
+out_accent_opus/
+*.tar
 accent_qa_log.json
 *.log
 __pycache__/

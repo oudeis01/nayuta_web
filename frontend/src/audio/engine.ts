@@ -67,8 +67,32 @@ export class AudioEngine {
     this.audioBase = audioBase.replace(/\/$/, "");
   }
 
+  // Prefetch set (action plan §7-6): the (lid,vidx) pairs the loaded tag fires
+  // first, so the demo's opening utterances have no network latency. Stored even
+  // while disabled, then warmed once audio is enabled (decode needs the context).
+  private prefetchPairs: [number, number][] = [];
+  private static readonly PREFETCH_CAP = 64;
+
   get enabled(): boolean {
     return this.ctx !== null && this.ctx.state === "running";
+  }
+
+  // Register the pairs to warm. If audio is already running, warm immediately;
+  // otherwise enable() will pick them up. A random accent per pair is enough —
+  // it primes the network/decoder for that lemma; a different accent at trigger
+  // time is a cheap miss, not a stall.
+  setPrefetch(pairs: [number, number][]): void {
+    this.prefetchPairs = pairs;
+    if (this.enabled) this.warmPrefetch();
+  }
+
+  private warmPrefetch(): void {
+    const n = Math.min(this.prefetchPairs.length, AudioEngine.PREFETCH_CAP);
+    for (let i = 0; i < n; i++) {
+      const [lid, vidx] = this.prefetchPairs[i];
+      // Decode into the LRU; the result is discarded here but cached for reuse.
+      this.getOrLoad(lid, vidx, this.pickAccent(), () => {});
+    }
   }
 
   // Must be called from a user gesture (browser autoplay policy). Idempotent:
@@ -83,6 +107,9 @@ export class AudioEngine {
       await this.loadDiscourse();
     }
     if (this.ctx.state !== "running") await this.ctx.resume();
+    // Warm the opening utterances now that the context exists (idempotent: hits
+    // already-cached entries cheaply on re-enable).
+    this.warmPrefetch();
   }
 
   disable(): void {

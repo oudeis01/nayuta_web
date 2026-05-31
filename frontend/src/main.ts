@@ -5,11 +5,18 @@ import { MonWhisper } from "./panels/mon_whisper";
 import { MonOpStream } from "./panels/mon_opstream";
 import { MonScanner } from "./panels/mon_scanner";
 import { ScreenRain } from "./panels/screen_rain";
-import { MonPlaceholder } from "./panels/mon_placeholder";
+import { MonMandala } from "./panels/mon_mandala";
+import { MonEntropy } from "./panels/mon_entropy";
 import { AudioEngine } from "./audio/engine";
 import type { OscEvent, OpRec } from "./stream/types";
 
 const SESSION = "session_001";
+// Asset bases (action plan §3-1, §12): the static frontend ships on Cloudflare
+// Pages, but the heavy assets — opus audio and the per-tag ops.bin.zst dumps,
+// which exceed the Pages 25 MB/file limit — live in the public R2 bucket. Both
+// default to a same-origin path so local dev still serves from public/.
+const CAPTURE_BASE = (import.meta.env.VITE_CAPTURE_BASE ?? "/captures").replace(/\/$/, "");
+const AUDIO_BASE = import.meta.env.VITE_AUDIO_BASE; // undefined → AudioEngine default
 const TAGS = [
   "tate_nnn",
   "mousse_irigaray",
@@ -92,7 +99,7 @@ document.body.appendChild(hud);
 
 // The whisper cloud / ambient drone engine (action plan §7). Fed the same OSC
 // events as the panels; dormant until the viewer enables audio.
-const audio = new AudioEngine();
+const audio = new AudioEngine(AUDIO_BASE);
 audioBtn.addEventListener("click", async () => {
   if (audio.enabled) {
     audio.disable();
@@ -161,7 +168,7 @@ let meta: MetaInfo | null = null;
 // These captures are the pre-show local tap dump (action plan §3-1). Audio is the
 // 2-channel Opus downmix (§2, §7). Both are fixed for Phase 1.
 const DATA_MODE = "PRE-SHOW DUMP";
-const AUDIO_FMT = "Opus 24kbps mono · 2ch downmix";
+const AUDIO_FMT = "Opus 32kbps mono · stereo downmix";
 let pending: OscEvent[] = [];
 let pendingOps: OpRec[] = [];
 let speedIdx = 0;
@@ -173,7 +180,7 @@ function applySpeed() {
 }
 
 async function loadTag(tag: string) {
-  const base = `/captures/${SESSION}/${tag}`;
+  const base = `${CAPTURE_BASE}/${SESSION}/${tag}`;
   const a = new DumpAdapter(base);
 
   // Fresh panels per tag so replay state (counters, logs) resets cleanly.
@@ -186,10 +193,12 @@ async function loadTag(tag: string) {
   whisper.setLemmaDict(lemmaDict);
 
   // Canonical aggregate layout (design doc §0-1): Screen 0 across the top band,
-  // then the A–F monitor strip below at 17:17:9:17:17:9. Monitors E and F hold
-  // placeholder slots — their /bert/att_w source never appears in these captures
-  // (the run never reaches the attention stage), so they stay dark but keep the
-  // grid proportions faithful.
+  // then the A–F monitor strip below at 17:17:9:17:17:9. Monitors E and F run the
+  // canonical pre-attention mode (E = (a,r) topology heatmap, F = |R| magnitude),
+  // both fed by the OpRec stream — the same view the install shows until the run
+  // reaches the attention stage (which these captures never do).
+  const mandala = new MonMandala();
+  const entropy = new MonEntropy();
   topPanel = rain;
   topOps = true;
   slots = [
@@ -197,8 +206,8 @@ async function loadTag(tag: string) {
     { panel: opstream, weight: 17, ops: true },
     { panel: clock, weight: 9 },
     { panel: whisper, weight: 17 },
-    { panel: new MonPlaceholder("E", "head mandala", "att_w 부재 · 정적"), weight: 17 },
-    { panel: new MonPlaceholder("F", "entropy breath", "att_w 부재 · 정적"), weight: 9 },
+    { panel: mandala, weight: 17, ops: true },
+    { panel: entropy, weight: 9, ops: true },
   ];
 
   // Only pay the ops.bin fetch/decompress when a mounted panel consumes it.
@@ -218,6 +227,10 @@ async function loadTag(tag: string) {
     corpus: cs?.source_name ?? manifest?.tag ?? tag,
     durationS: manifest?.duration_s ?? manifest?.duration_cap_s ?? 0,
   };
+
+  // Prime the opening utterances' audio (action plan §7-6). No-op until the
+  // viewer enables audio; enable() will replay this set.
+  audio.setPrefetch(adapter.firstWhisperPairs(64));
 
   pending = [];
   pendingOps = [];
