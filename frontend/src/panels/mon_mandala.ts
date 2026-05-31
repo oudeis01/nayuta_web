@@ -1,100 +1,110 @@
 import type { OscEvent, OpRec } from "../stream/types";
 
-// Monitor E — Head Mandala / Computation Topology. Port of
-// graphics_consumer/src/screens/mon_mandala.cpp.
+// Monitor E — Head Mandala. Port of graphics_consumer/src/screens/mon_mandala.cpp,
+// pre-attention mode reworked into a RADIAL (polar) structure map.
 //
-// The canonical panel is DUAL-MODE: a pre-attention "ZMQ topology" view driven by
-// the OpRec (a, r) phase space, which then switches to an att_w heatmap once
-// post-softmax attention weights arrive. At install pace a 2-hour window never
-// reaches the attention stage (see screen_rain.ts for the bert.c arithmetic), so
-// /bert/att_w never appears in the Phase-1 captures — exactly the regime where the
-// install also shows the topology view. We therefore port the pre-attention mode
-// faithfully (it runs on the real captured operands, no synthetic data) and leave
-// the att_w heatmap branch for captures that actually reach attention.
+// WHY RADIAL (design decision 2026-05-31): the canonical pre-attention fallback
+// plotted the op (a, r) into a cartesian phase space — but Screen 0 (computation
+// rain) already owns that exact (a-x, r-y) view in the web build, so the two read
+// as the same picture. The data poverty of the Phase-1 captures (only op_types
+// 0–8, no attention) forces every OpRec-only panel onto the same signal, so they
+// converge. To restore the panel's distinct "mandala" identity we project the SAME
+// real OpRec stream onto a polar grid that no other panel uses:
 //
-// Topology math (verbatim from the C++ pre-attention branch):
-//   r_ema_abs = r_ema_abs*0.9999 + |r|*0.0001        (per-rec, slow magnitude EMA)
-//   scale     = 0.3 / max(r_ema_abs, 1e-6)
-//   x = a*scale*(N/2) + N/2 ,  y = r*scale*(N/2) + N/2   (clamped to grid)
-//   cell      = cell*0.97 + min(1, |r|*scale)*0.03    (per-rec accumulate)
-//   cell     *= 0.998 each frame                       (slow decay)
-// The *(N/2) factor makes the spread resolution-independent, so the small web grid
-// reads the same shape as the install's 512² window.
+//   angle  = op_type    — the 25 arithmetic stages of one forward pass laid around
+//                         the circle in execution order (EMB → LayerNorm → QKV …
+//                         → FFN residual). A complete pass would light a full ring;
+//                         these captures only reach the first ~9 stages, so the
+//                         mandala is an honest partial arc.
+//   radius = q_pos      — token position. Inner = position 0, rim = the furthest
+//                         position the computation has crawled to (adaptive).
+//   value  = |r| accum  — the magnitude of the result, accumulated then decayed.
+//
+// This stays fully real-data (no synthetic fill, consistent with Screen 0's
+// authenticity rule) while diverging visually from the cartesian rain. The att_w
+// per-head heatmap (the panel's post-attention identity) is left for captures that
+// reach the attention stage. Verified fields (tate_nnn, first 400k recs): op_type
+// 0–7 present, q_pos 100% valid range 0–74, layer/head 0% valid.
 
-const N = 64;
-const TOPO_DECAY = 0.998;
-const GAMMA = 0.6; // canonical frag: pow(v, 0.6) lifts dim cells
+const N_SECT = 25; // OpType::Count — one angular wedge per arithmetic stage
+const QSTORE = 128; // q_pos bins (clamp); install reaches ~75, headroom to grow
+const ACCUM = 0.08; // per-rec blend into a cell (1-ACCUM keeps history)
+const DECAY = 0.985; // per-frame fade so the mandala breathes
+const CUTOFF = 1e-3;
+const GAMMA = 0.6; // lift dim cells, matching the canonical frag pow(v,0.6)
 const REF_H = 600;
+const TWO_PI = Math.PI * 2;
+
+const POS_NA = 0xffff;
 
 export class MonMandala {
-  // cells[x*N+y], x = a-axis, y = r-axis (same convention as screen_rain.ts).
-  private cells = new Float32Array(N * N);
-  private rEmaAbs = 0.01; // seed matches the C++ default
+  // cells[sect*QSTORE + q]: accumulated |r| for (op_type sect, token position q).
+  private cells = new Float32Array(N_SECT * QSTORE);
+  private rEmaAbs = 0.01; // slow magnitude EMA (seed matches the C++ default)
+  private maxQ = 1; // furthest token position seen, for adaptive radius
 
   update(_events: OscEvent[], ops: OpRec[], _dt: number): void {
     const cells = this.cells;
 
-    // Pre-attention topology: plot each op's (a, r) into phase space.
     for (const rec of ops) {
+      const ot = rec.opType;
+      if (ot < 0 || ot >= N_SECT) continue;
+      if ((rec.flags & 1) === 0 || rec.qPos === POS_NA) continue;
+      if (!Number.isFinite(rec.r)) continue;
+
       this.rEmaAbs = this.rEmaAbs * 0.9999 + Math.abs(rec.r) * 0.0001;
       const scale = 0.3 / Math.max(this.rEmaAbs, 1e-6);
-      if (!Number.isFinite(rec.a) || !Number.isFinite(rec.r)) continue;
-      const x = clampI(rec.a * scale * (N * 0.5) + N * 0.5, 0, N - 1);
-      const y = clampI(rec.r * scale * (N * 0.5) + N * 0.5, 0, N - 1);
-      const idx = x * N + y;
-      cells[idx] = cells[idx] * 0.97 + Math.min(1, Math.abs(rec.r) * scale) * 0.03;
+      const contribution = Math.min(1, Math.abs(rec.r) * scale);
+
+      const q = rec.qPos < QSTORE ? rec.qPos : QSTORE - 1;
+      if (q > this.maxQ) this.maxQ = q;
+      const idx = ot * QSTORE + q;
+      cells[idx] = cells[idx] * (1 - ACCUM) + contribution * ACCUM;
     }
 
-    // Slow decay so the topology breathes rather than freezes.
     for (let i = 0; i < cells.length; i++) {
-      const v = cells[i] * TOPO_DECAY;
-      cells[i] = v < 1e-5 ? 0 : v;
+      const v = cells[i] * DECAY;
+      cells[i] = v < CUTOFF ? 0 : v;
     }
-  }
-
-  // Offscreen N×N buffer, nearest-neighbor upscaled (mirrors GL_NEAREST), same as
-  // ScreenRain so the two heatmaps render identically.
-  private off: HTMLCanvasElement | null = null;
-  private offCtx: CanvasRenderingContext2D | null = null;
-  private img: ImageData | null = null;
-
-  private ensureOff(): void {
-    if (this.off) return;
-    this.off = document.createElement("canvas");
-    this.off.width = N;
-    this.off.height = N;
-    this.offCtx = this.off.getContext("2d")!;
-    this.img = this.offCtx.createImageData(N, N);
   }
 
   render(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
     ctx.fillStyle = "#000";
     ctx.fillRect(x, y, w, h);
 
-    this.ensureOff();
-    const img = this.img!;
-    const data = img.data;
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const rMax = Math.min(w, h) * 0.46;
+    const rInner = rMax * 0.06; // small hole so position 0 isn't a singularity
+    const span = rMax - rInner;
+    const maxQ = Math.max(1, this.maxQ);
+    const sw = TWO_PI / N_SECT; // angular width per op_type wedge
+    const gap = sw * 0.08; // thin seam between wedges
+    const ringT = Math.max(1, span / maxQ); // radial thickness of one q ring
     const cells = this.cells;
-    // cell (gx=a, gy=r) → pixel (col=gx, row=N-1-gy) so +r reads upward.
-    for (let gx = 0; gx < N; gx++) {
-      for (let gy = 0; gy < N; gy++) {
-        const raw = cells[gx * N + gy];
-        const v = raw <= 0 ? 0 : Math.pow(Math.min(1, raw), GAMMA);
-        const c = Math.round(v * 255);
-        const px = (N - 1 - gy) * N + gx;
-        const o = px * 4;
-        data[o] = c;
-        data[o + 1] = c;
-        data[o + 2] = c;
-        data[o + 3] = 255;
+
+    for (let s = 0; s < N_SECT; s++) {
+      // Execution order around the circle, starting at the top, clockwise.
+      const a0 = -Math.PI / 2 + s * sw + gap * 0.5;
+      const a1 = -Math.PI / 2 + (s + 1) * sw - gap * 0.5;
+      const base = s * QSTORE;
+      const qLim = Math.min(QSTORE - 1, maxQ);
+      for (let q = 0; q <= qLim; q++) {
+        const v = cells[base + q];
+        if (v <= 0) continue;
+        const rNorm = q / maxQ; // 0..1
+        const rc = rInner + rNorm * span;
+        const r0 = Math.max(rInner, rc - ringT * 0.5);
+        const r1 = rc + ringT * 0.5;
+        const c = Math.round(Math.pow(Math.min(1, v), GAMMA) * 255);
+        ctx.fillStyle = `rgb(${c},${c},${c})`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r1, a0, a1, false);
+        ctx.arc(cx, cy, r0, a1, a0, true);
+        ctx.closePath();
+        ctx.fill();
       }
     }
-    this.offCtx!.putImageData(img, 0, 0);
-
-    const prevSmooth = ctx.imageSmoothingEnabled;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.off!, x, y, w, h);
-    ctx.imageSmoothingEnabled = prevSmooth;
 
     // Faint corner label, matching the aggregate convention.
     const s = h / REF_H;
@@ -102,11 +112,6 @@ export class MonMandala {
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
     ctx.fillStyle = "rgba(31,31,31,1)";
-    ctx.fillText("E  head mandala  ·  topology", x + 10 * s, y + 6 * s);
+    ctx.fillText("E  head mandala  ·  stage×pos", x + 10 * s, y + 6 * s);
   }
-}
-
-function clampI(v: number, lo: number, hi: number): number {
-  const i = Math.floor(v);
-  return i < lo ? lo : i > hi ? hi : i;
 }
