@@ -92,7 +92,20 @@ if [ -n "$BUILD_ONLY" ]; then
   exit 0
 fi
 
-DEPLOY=(wrangler pages deploy dist --project-name "$PROJECT")
+# Pages rejects any file >25 MiB; the heavy capture dumps + opus live on R2 and
+# the build already points VITE_CAPTURE_BASE/VITE_AUDIO_BASE there, so the copies
+# vite pulled in from public/ are dead weight (ops.bin.zst alone is ~93 MiB).
+# Drop those dirs from dist/ before publishing so only the static shell ships.
+for d in captures audio; do
+  if [ -d "dist/$d" ]; then
+    echo "==> prune dist/$d (served from R2, not Pages)"
+    rm -rf "dist/$d"
+  fi
+done
+
+# --commit-dirty: this repo's working tree is normally dirty at deploy time
+# (regenerated dist/, node_modules); the flag just silences Pages' git warning.
+DEPLOY=(wrangler pages deploy dist --project-name "$PROJECT" --commit-dirty=true)
 [ -n "$BRANCH" ] && DEPLOY+=(--branch "$BRANCH")
 
 if [ -n "$DRYRUN" ]; then
