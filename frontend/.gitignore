@@ -15,6 +15,9 @@ dist-ssr
 # local dev capture copies (served from public/ during dev; real data lives on R2)
 public/captures
 
+# deployment config (bucket URLs + Pages project) — local per-machine, not committed
+deploy.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

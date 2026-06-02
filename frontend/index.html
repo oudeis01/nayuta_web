@@ -10,8 +10,95 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
+    <!-- Critical boot loader, inlined so it paints during the JS bundle download
+         (before main.ts parses). The braille spinner is a vertical glyph strip
+         scrolled by a transform/steps keyframe: transform animates on the
+         compositor thread, so the spinner keeps turning even while the main
+         thread is blocked by the synchronous fzstd decompress of the ~180 MB ops
+         buffer (a content/width keyframe would freeze there). main.ts drives the
+         bar from the real download bytes and removes #loader once frame 1 is up. -->
+    <style>
+      #loader {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #000;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        color: #ccc;
+        transition: opacity 0.4s ease;
+      }
+      #loader.done { opacity: 0; pointer-events: none; }
+      #loader .ld-spin {
+        --cell: 40px;
+        height: var(--cell);
+        overflow: hidden;
+        font-size: 30px;
+        color: #e6e6e6;
+      }
+      #loader .ld-spin-strip {
+        white-space: pre;
+        line-height: var(--cell);
+        text-align: center;
+        will-change: transform;
+        animation: ld-braille 1s steps(10) infinite;
+      }
+      #loader .ld-title {
+        font-size: 12px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: #777;
+      }
+      #loader .ld-bar {
+        width: 260px;
+        height: 8px;
+        border: 1px solid #333;
+        background: #0a0a0a;
+      }
+      #loader .ld-fill {
+        height: 100%;
+        width: 0;
+        background: #cfcfcf;
+        transition: width 0.18s ease;
+      }
+      #loader .ld-meta {
+        display: flex;
+        gap: 10px;
+        font-size: 11px;
+        color: #888;
+      }
+      #loader .ld-pct { min-width: 34px; color: #bbb; }
+      /* Scroll the 10-glyph strip up one cell per step; the loop snaps back to
+         glyph 0, giving the classic braille spin without any content swap. */
+      @keyframes ld-braille {
+        from { transform: translateY(0); }
+        to   { transform: translateY(calc(var(--cell) * -10)); }
+      }
+    </style>
   </head>
   <body>
+    <div id="loader">
+      <div class="ld-spin"><div class="ld-spin-strip">⠋
+⠙
+⠹
+⠸
+⠼
+⠴
+⠦
+⠧
+⠇
+⠏</div></div>
+      <div class="ld-title">namedrop</div>
+      <div class="ld-bar"><div class="ld-fill"></div></div>
+      <div class="ld-meta">
+        <span class="ld-pct">0%</span>
+        <span class="ld-stage">initializing</span>
+      </div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

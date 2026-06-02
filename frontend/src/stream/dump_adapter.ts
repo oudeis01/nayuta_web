@@ -28,6 +28,41 @@ import type { EventStream, OscEvent, OpRec, ResidualRec } from "./types";
 // bert --residual-basis; older captures contain only OpMsg frames (reserved 0).
 const MSG_RESIDUAL = 1;
 
+// Fetch a URL into a Uint8Array, reporting download progress (0..1) as bytes
+// arrive. Used to drive the boot loader bar from the dominant ops.bin.zst fetch.
+// Falls back to a plain arrayBuffer read when the body cannot be streamed or the
+// server omits content-length (progress then jumps straight to 1 on completion).
+async function fetchBytes(
+  url: string,
+  onProgress?: (frac: number) => void,
+): Promise<Uint8Array> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch ${url}: ${res.status}`);
+  const total = Number(res.headers.get("content-length")) || 0;
+  if (!res.body || !onProgress || !total) {
+    const buf = new Uint8Array(await res.arrayBuffer());
+    onProgress?.(1);
+    return buf;
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.length;
+    onProgress(Math.min(1, loaded / total));
+  }
+  const out = new Uint8Array(loaded);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.length;
+  }
+  return out;
+}
+
 interface OpFrame {
   tsNs: number;
   recOff: number; // byte offset of records[0] within opsRaw
@@ -112,10 +147,15 @@ export class DumpAdapter implements EventStream {
     return out;
   }
 
-  async load(opts: { ops?: boolean } = {}): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/events.jsonl.zst`);
-    if (!res.ok) throw new Error(`fetch ${this.baseUrl}: ${res.status}`);
-    const comp = new Uint8Array(await res.arrayBuffer());
+  async load(
+    opts: { ops?: boolean } = {},
+    onProgress?: (frac: number) => void,
+  ): Promise<void> {
+    // events.jsonl.zst is small next to ops.bin.zst, so it gets the first 8% of
+    // the bar; the heavy ops fetch (when mounted) drives the remaining 92%.
+    const comp = await fetchBytes(`${this.baseUrl}/events.jsonl.zst`, (p) =>
+      onProgress?.(p * 0.08),
+    );
     const raw = decompress(comp);
     const text = new TextDecoder().decode(raw);
 
@@ -131,16 +171,15 @@ export class DumpAdapter implements EventStream {
     this.idx = 0;
     this.playT = 0;
 
-    if (opts.ops) await this.loadOps();
+    if (opts.ops) await this.loadOps((p) => onProgress?.(0.08 + p * 0.92));
+    else onProgress?.(1);
   }
 
   // Decompress ops.bin and index its frames without materializing records. Each
   // frame stores its capture ts (same clock as the OSC events, so the two share
   // one playback timeline) and where its records live in the resident buffer.
-  private async loadOps(): Promise<void> {
-    const res = await fetch(`${this.baseUrl}/ops.bin.zst`);
-    if (!res.ok) throw new Error(`fetch ${this.baseUrl}/ops.bin: ${res.status}`);
-    const comp = new Uint8Array(await res.arrayBuffer());
+  private async loadOps(onProgress?: (frac: number) => void): Promise<void> {
+    const comp = await fetchBytes(`${this.baseUrl}/ops.bin.zst`, onProgress);
     const raw = decompress(comp);
     const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
 

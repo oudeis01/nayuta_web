@@ -65,6 +65,25 @@ const GAP = 2;
 // strip takes the bottom 34% of the viewport height.
 const STRIP_FRAC = 0.34;
 
+// Boot loader (markup + critical CSS live in index.html so it paints during the
+// bundle download). We drive its bar from real fetch bytes and remove it once
+// the first frame is ready, so the viewer sees liveness instead of a black hole.
+const loaderEl = document.getElementById("loader");
+const loaderFill = loaderEl?.querySelector<HTMLElement>(".ld-fill") ?? null;
+const loaderPct = loaderEl?.querySelector<HTMLElement>(".ld-pct") ?? null;
+const loaderStage = loaderEl?.querySelector<HTMLElement>(".ld-stage") ?? null;
+function setLoadProgress(frac: number, stage?: string) {
+  const p = Math.max(0, Math.min(1, frac));
+  if (loaderFill) loaderFill.style.width = `${(p * 100).toFixed(1)}%`;
+  if (loaderPct) loaderPct.textContent = `${Math.round(p * 100)}%`;
+  if (stage && loaderStage) loaderStage.textContent = stage;
+}
+function hideLoader() {
+  if (!loaderEl) return;
+  loaderEl.classList.add("done");
+  setTimeout(() => loaderEl.remove(), 450);
+}
+
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const canvas = document.createElement("canvas");
 app.appendChild(canvas);
@@ -183,7 +202,7 @@ function applySpeed() {
   speedLbl.textContent = `${SPEEDS[speedIdx]}x`;
 }
 
-async function loadTag(tag: string) {
+async function loadTag(tag: string, onProgress?: (frac: number) => void) {
   const base = `${CAPTURE_BASE}/${SESSION}/${tag}`;
   const a = new DumpAdapter(base);
 
@@ -218,7 +237,7 @@ async function loadTag(tag: string) {
   // Only pay the ops.bin fetch/decompress when a mounted panel consumes it.
   const needOps = topOps || slots.some((s) => s.ops);
   const [, manifest] = await Promise.all([
-    a.load({ ops: needOps }),
+    a.load({ ops: needOps }, onProgress),
     fetch(`${base}/manifest.json`).then((r) => (r.ok ? r.json() : null)),
   ]);
   adapter = a;
@@ -394,18 +413,27 @@ function frame(now: number) {
 }
 
 resize();
+// Boot in two visible stages on the loader bar: the small corpus-wide lookups
+// (first ~15%), then the heavy per-tag dump fetch (remaining ~85%, byte-driven).
+setLoadProgress(0.02, "loading dictionaries");
+let corpusDone = 0;
+const corpusTick = () => setLoadProgress(0.02 + ++corpusDone * 0.04, "loading dictionaries");
 // Pull the corpus-wide lookups before the first tag so Monitor D resolves
 // whisper words and Monitor A resolves tokens from the very first event.
 Promise.all([
   fetch("/lemma_surface.json")
     .then((r) => (r.ok ? r.json() : {}))
-    .then((d) => (lemmaDict = d)),
+    .then((d) => ((lemmaDict = d), corpusTick())),
   fetch("/bert_vocab.txt")
     .then((r) => (r.ok ? r.text() : ""))
-    .then((t) => (bertVocab = t.split("\n"))),
+    .then((t) => ((bertVocab = t.split("\n")), corpusTick())),
   fetch("/residual_means.bin")
     .then((r) => (r.ok ? r.arrayBuffer() : null))
-    .then((b) => (residualMeans = b ? parseHelixData(b) : null)),
+    .then((b) => ((residualMeans = b ? parseHelixData(b) : null), corpusTick())),
 ])
-  .then(() => loadTag(TAGS[0]))
-  .then(() => requestAnimationFrame(frame));
+  .then(() => loadTag(TAGS[0], (p) => setLoadProgress(0.15 + p * 0.82, "loading op stream")))
+  .then(() => {
+    setLoadProgress(1, "ready");
+    hideLoader();
+    requestAnimationFrame(frame);
+  });
