@@ -373,7 +373,7 @@ function updateMetaLine() {
 function modalHtml(): string {
   const views = VIEW_LABELS.map((label, i) => `<kbd>${i + 1}</kbd> ${label}`).join("<br>");
   return `
-    <h2>namedrop · bert wall</h2>
+    <h2>aftertheory · bert wall</h2>
     <h3>capture</h3>
     <dl>
       <dt>data</dt><dd>${DATA_MODE}</dd>
