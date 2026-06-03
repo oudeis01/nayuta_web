@@ -117,8 +117,9 @@ infoBtn.textContent = "info";
 hud.append(sessionSel, slowBtn, speedLbl, fastBtn, pauseBtn, audioBtn, infoBtn);
 document.body.appendChild(hud);
 
-// The whisper cloud / ambient drone engine (action plan §7). Fed the same OSC
-// events as the panels; dormant until the viewer enables audio.
+// The whisper cloud engine (action plan §7). Fed the same OSC events as the
+// panels; dormant until the viewer enables audio. (The op_flow ambient drone was
+// dropped on the web by project decision 2026-06-03; see audio/engine.ts.)
 const audio = new AudioEngine(AUDIO_BASE);
 audioBtn.addEventListener("click", async () => {
   if (audio.enabled) {

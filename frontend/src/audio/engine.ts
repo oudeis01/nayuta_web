@@ -1,8 +1,8 @@
 import type { OscEvent } from "../stream/types";
 
 // Web Audio port of the SuperCollider whisper cloud engine
-// (supercollider/whisper_cloud_engine.scd). The install routes three audio
-// triggers; this mirrors all three faithfully (action plan §7-7..7-9):
+// (supercollider/whisper_cloud_engine.scd). The install routes two whisper
+// triggers; this mirrors both faithfully (action plan §7-7..7-9):
 //
 //   /bert/whisper       — a lemma's attention crossed threshold. Play the word,
 //                         then its nearest graph neighbors as a delayed cloud,
@@ -10,8 +10,11 @@ import type { OscEvent } from "../stream/types";
 //   /bert/word_trigger  — accumulated |r| crossed the word threshold. Same voice,
 //                         layer-scaled amp. (Absent from Phase-1 captures; dormant
 //                         but wired so live mode just works.)
-//   /bert/op_flow       — 1/sec compute pulse. Drives a continuous ambient drone
-//                         (no per-event retrigger), so the QKV silence still hums.
+//
+// The install's third trigger, /bert/op_flow (a 1/sec compute pulse that drove a
+// continuous ambient drone; see docs/20260524-op-flow-ambient-audio.md), is
+// intentionally dropped on the web (project decision 2026-06-03). The drone is
+// not reproduced here; op_flow events are ignored by handle().
 //
 // Accent axis (the new dimension over the install's single neutral voice): every
 // utterance picks 1 of 7 accents at trigger time (project decision 2026-05-30,
@@ -52,12 +55,6 @@ export class AudioEngine {
   private loading = new Set<string>();
 
   private discourse: Discourse = { core: new Set(), marker: new Set(), ids: new Set() };
-
-  // op_flow ambient drone (continuous; params lag toward op_flow targets).
-  private droneOscs: OscillatorNode[] = [];
-  private droneFilter!: BiquadFilterNode;
-  private droneGain!: GainNode;
-  private droneStarted = false;
 
   // Base URL for opus assets. Cloudflare R2 public bucket (prefix "audio/") in
   // production; overridable for a local dir during dev before the R2 upload.
@@ -103,7 +100,6 @@ export class AudioEngine {
       this.master = this.ctx.createGain();
       this.master.gain.value = 1;
       this.master.connect(this.ctx.destination);
-      this.buildDrone();
       await this.loadDiscourse();
     }
     if (this.ctx.state !== "running") await this.ctx.resume();
@@ -217,62 +213,6 @@ export class AudioEngine {
     else if (this.discourse.marker.has(lid)) this.scheduleEchoes(lid, vidx, accent, pan, 2, 2.0);
   }
 
-  // ── op_flow ambient drone ────────────────────────────────────────────────
-  // op_type → base frequency (embed 60, LN 80, QKV 100, attn 120, proj 90, FFN 70).
-  private static readonly FLOW_BASE_FREQ = [
-    60, 60, 80, 80, 80, 80, 80, 80, 100, 100, 120, 120, 120, 120, 120, 120, 90, 90, 90, 70, 70, 70, 70, 70, 70,
-  ];
-
-  // Continuous drone: partials at f, 2f, 3f plus a sub square at 0.5f, through a
-  // lowpass at 6f, summed into a gain we ramp from op_flow (SynthDef \bert_ambient).
-  private buildDrone(): void {
-    const ctx = this.ctx!;
-    this.droneFilter = ctx.createBiquadFilter();
-    this.droneFilter.type = "lowpass";
-    this.droneFilter.frequency.value = 80 * 6;
-    this.droneGain = ctx.createGain();
-    this.droneGain.gain.value = 0; // silent until first op_flow
-    this.droneFilter.connect(this.droneGain).connect(this.master);
-
-    const specs: [OscillatorType, number, number][] = [
-      ["sine", 1, 0.5],
-      ["sine", 2, 0.25],
-      ["sine", 3, 0.12],
-      ["square", 0.5, 0.08],
-    ];
-    for (const [type, mult, gain] of specs) {
-      const o = ctx.createOscillator();
-      o.type = type;
-      o.frequency.value = 80 * mult;
-      const g = ctx.createGain();
-      g.gain.value = gain;
-      o.connect(g).connect(this.droneFilter);
-      // Store the partial's multiplier on the node so op_flow can retune it.
-      (o as OscillatorNode & { mult: number }).mult = mult;
-      this.droneOscs.push(o);
-    }
-  }
-
-  private updateFlow(opType: number, layer: number, rEma: number): void {
-    if (!this.ctx) return;
-    if (!this.droneStarted) {
-      for (const o of this.droneOscs) o.start();
-      this.droneStarted = true;
-    }
-    const ot = Math.max(0, Math.min(24, opType | 0));
-    const baseFreq = AudioEngine.FLOW_BASE_FREQ[ot];
-    const freq = baseFreq + Math.max(0, layer) * 2; // layer micro-modulation
-    const amp = Math.max(0.01, Math.min(0.08, rEma * 5));
-    const t = this.ctx.currentTime;
-    const tau = 0.5; // ~Lag smoothing toward targets
-    for (const o of this.droneOscs) {
-      const mult = (o as OscillatorNode & { mult: number }).mult;
-      o.frequency.setTargetAtTime(freq * mult, t, tau);
-    }
-    this.droneFilter.frequency.setTargetAtTime(freq * 6, t, tau);
-    this.droneGain.gain.setTargetAtTime(amp, t, tau);
-  }
-
   // ── Event entry point ──────────────────────────────────────────────────────
   // Fed the same OSC events the panels see. No-op until enable()d, so it is safe
   // to call every frame regardless of audio state.
@@ -285,9 +225,6 @@ export class AudioEngine {
           break;
         case "/bert/word_trigger":
           this.onWordTrigger(ev.args);
-          break;
-        case "/bert/op_flow":
-          this.updateFlow(ev.args[0], ev.args[1], ev.args[3]);
           break;
         default:
           break;
