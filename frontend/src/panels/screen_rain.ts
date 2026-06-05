@@ -1,8 +1,10 @@
 import type { OscEvent, OpRec } from "../stream/types";
 
 // Screen 0 — Computation Rain. Port of graphics_consumer/src/screens/screen_rain.cpp
-// (spec: docs/computation_rain_spec.md). A 64×64 heatmap: x = k_pos (the matmul
-// i-index, sweeping in real time), y = symMap(result). Each frame the live ops
+// (spec: docs/computation_rain_spec.md). An asymmetric 768×64 heatmap (D-S1, user
+// 2026-06-05): x = k_pos (the matmul i-index) now maps 1:1 to the full 768-wide grid
+// (no binning), while y = symMap(result) keeps 64 vertical bands (r is continuous,
+// so 768 rows would collapse to 1px horizontal hairlines). Each frame the live ops
 // paint bright cells, then everything decays, leaving comet-like trails of the
 // running computation. (The original C++ used x = operand_a; see the rework note.)
 //
@@ -50,14 +52,14 @@ import type { OscEvent, OpRec } from "../stream/types";
 //   layer are absent here, so the flash stays dormant; future captures that do
 //   reach those milestones will light it up.
 
-const N = 64;
+const NX = 768; // x cells: k_pos (i-index) 1:1, full BERT hidden width
+const NY = 64; // y cells: symMap(r) bands (continuous r, kept coarse on purpose)
 const DECAY = 0.91;
 const CUTOFF = 0.02;
 const REF_H = 600;
 
 const POS_NA = 0xffff;
 const OP_MUL_ATTN_QK = 10;
-const IDX_SPAN = 768; // BERT-base hidden size; k_pos (i-index) spans 0..767 on every op
 
 // Fixed symmetric-log mapping (replaces the QKV-dominated adaptive RMS scale).
 // symMap(v) = sign(v)·log1p(|v|/LIN) normalized to [-1, 1] over |v| ≤ ~35. The
@@ -66,7 +68,7 @@ const IDX_SPAN = 768; // BERT-base hidden size; k_pos (i-index) spans 0..767 on 
 // ops (embedding, QKV) still spread legibly instead of collapsing to one pixel.
 const SYMLOG_LIN = 0.4;
 const SYMLOG_MAX = Math.log1p(35 / SYMLOG_LIN);
-const FILL = 0.46; // grid fill factor: ±1 maps to ±FILL·N from center (edge margin)
+const FILL = 0.46; // grid fill factor: ±1 maps to ±FILL·NY from center (edge margin)
 function symMap(v: number): number {
   return (Math.sign(v) * Math.log1p(Math.abs(v) / SYMLOG_LIN)) / SYMLOG_MAX;
 }
@@ -99,8 +101,9 @@ class Flash {
 }
 
 export class ScreenRain {
-  // cells_[x*N+y], x = a-axis, y = r-axis (matches the C++ index convention).
-  private cells = new Float32Array(N * N);
+  // cells[x*NY+y], x = k_pos (i-index) in [0,NX), y = symMap(r) in [0,NY). Render
+  // flips y so +r reads upward (matches the C++ index convention).
+  private cells = new Float32Array(NX * NY);
   private phase: Phase = Phase.QKV;
   private flash = new Flash();
 
@@ -143,7 +146,7 @@ export class ScreenRain {
       const qValid = (rec.flags & 1) !== 0 && rec.qPos !== POS_NA;
       const kValid = (rec.flags & 2) !== 0 && rec.kPos !== POS_NA;
       if (rec.opType === OP_MUL_ATTN_QK && qValid && kValid) {
-        if (rec.qPos < N && rec.kPos < N) cells[rec.qPos * N + rec.kPos] = 1.0;
+        if (rec.qPos < NX && rec.kPos < NY) cells[rec.qPos * NY + rec.kPos] = 1.0;
         this.phase = Phase.Attention;
         continue; // attention recs paint at (q,k), not in (a,r) space
       }
@@ -155,22 +158,23 @@ export class ScreenRain {
 
       const r = rec.r;
       if (!Number.isFinite(r)) continue;
-      const y = clampI((symMap(r) * FILL + 0.5) * N, 0, N - 1);
+      const y = clampI((symMap(r) * FILL + 0.5) * NY, 0, NY - 1);
 
       // x = k_pos, the matmul output-dimension (i-index) that bert.c reuses on every
-      // non-attention op, sweeping 0..767 in real time as the op crawls its rows. So
-      // each op_type reads as a horizontal comet at its own r-height and the whole
-      // stream stays alive — both the front LayerNorm bands and the QKV tail. The
-      // lone op with no k_pos (LnRsqrt, 512 recs) falls back to its operand a.
+      // non-attention op, sweeping 0..767 in real time as the op crawls its rows. With
+      // the asymmetric grid (NX=768 = BERT hidden size) it now maps 1:1, no binning. So each
+      // op_type reads as a horizontal comet at its own r-height and the whole stream
+      // stays alive — both the front LayerNorm bands and the QKV tail. The lone op
+      // with no k_pos (LnRsqrt, 512 recs) falls back to its operand a across the width.
       let x: number;
       if (kValid) {
-        x = clampI((rec.kPos / (IDX_SPAN - 1)) * (N - 1), 0, N - 1);
+        x = clampI(rec.kPos, 0, NX - 1);
       } else {
         const a = rec.a;
         if (!Number.isFinite(a)) continue;
-        x = clampI((symMap(a) * FILL + 0.5) * N, 0, N - 1);
+        x = clampI((symMap(a) * FILL + 0.5) * NX, 0, NX - 1);
       }
-      cells[x * N + y] = 1.0;
+      cells[x * NY + y] = 1.0;
     }
 
     // 4. Advance the flash; wipe the grid at the hold→fade-out boundary (§7).
@@ -185,7 +189,7 @@ export class ScreenRain {
     }
   }
 
-  // Offscreen 64×64 buffer, upscaled with nearest-neighbor to mirror GL_NEAREST.
+  // Offscreen 768×64 buffer, upscaled with nearest-neighbor to mirror GL_NEAREST.
   private off: HTMLCanvasElement | null = null;
   private offCtx: CanvasRenderingContext2D | null = null;
   private img: ImageData | null = null;
@@ -193,10 +197,10 @@ export class ScreenRain {
   private ensureOff(): void {
     if (this.off) return;
     this.off = document.createElement("canvas");
-    this.off.width = N;
-    this.off.height = N;
+    this.off.width = NX;
+    this.off.height = NY;
     this.offCtx = this.off.getContext("2d")!;
-    this.img = this.offCtx.createImageData(N, N);
+    this.img = this.offCtx.createImageData(NX, NY);
   }
 
   render(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
@@ -207,12 +211,12 @@ export class ScreenRain {
     const img = this.img!;
     const data = img.data;
     const cells = this.cells;
-    // cell (gx=a, gy=r) → pixel (col=gx, row=N-1-gy) so +r reads upward.
-    for (let gx = 0; gx < N; gx++) {
-      for (let gy = 0; gy < N; gy++) {
-        const v = cells[gx * N + gy];
+    // cell (gx=k_pos, gy=r) → pixel (col=gx, row=NY-1-gy) so +r reads upward.
+    for (let gx = 0; gx < NX; gx++) {
+      for (let gy = 0; gy < NY; gy++) {
+        const v = cells[gx * NY + gy];
         const c = v <= 0 ? 0 : Math.round(Math.min(1, v) * 255);
-        const px = (N - 1 - gy) * N + gx;
+        const px = (NY - 1 - gy) * NX + gx;
         const o = px * 4;
         data[o] = c;
         data[o + 1] = c;
