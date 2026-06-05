@@ -1,6 +1,7 @@
 import type { OscEvent, OpRec } from "../stream/types";
 import { Helix } from "../geometry/helix";
 import { LogQueue } from "./log_queue";
+import { orient } from "./aspect";
 
 // Monitor A — Token Scanner. Faithful port of graphics_consumer/src/screens/
 // mon_scanner.cpp. The top third shows the sentence being processed (BERT
@@ -257,13 +258,24 @@ export class MonScanner {
     const aw = ctx.measureText(axis).width;
     ctx.fillText(axis, x + w - aw - 8 * s, y + 6 * s);
 
+    // Layout reflows on the rect's own aspect (D-A3), recomputed each frame so a
+    // resize flips it live. Landscape (the install's 1920x1080 monitors, and any
+    // wide web rect): sentence top full-width, then log left / helix right 50:50.
+    // Portrait (a tall web single-view): the current stacked layout, helix as the
+    // sentence backdrop.
+    const landscape = orient(w, h) === "landscape";
+
     // ── Sentence area (top 35%) ───────────────────────────────────────────────
     const sentTop = y + 22 * s;
     const sentH = h * 0.35;
     const dividerY = sentTop + sentH;
 
-    // Background helix (cross-section) in the top-right; tokens render on top.
-    this.helix.draw(ctx, x + w * 0.6, sentTop, w * 0.4, sentH, "cross", 0.6);
+    // Portrait keeps the helix as a cross-section backdrop behind the sentence;
+    // landscape relocates it to the bottom-right half (drawn below the divider),
+    // leaving the sentence full-width, so skip the backdrop there.
+    if (!landscape) {
+      this.helix.draw(ctx, x + w * 0.6, sentTop, w * 0.4, sentH, "cross", 0.6);
+    }
 
     if (this.nTokens > 0) {
       if (this.layoutDirty || this.layoutFs !== fontMD || this.layoutW !== w) {
@@ -333,12 +345,24 @@ export class MonScanner {
     ctx.fillStyle = "rgba(30,30,30,1)";
     ctx.fillRect(x + 8 * s, Math.round(dividerY) + 0.5, w - 16 * s, 1);
 
-    // ── Log area (bottom 65%) — newest at the bottom ──────────────────────────
+    // ── Log area (bottom band) — newest at the bottom ─────────────────────────
+    // Landscape: log on the left half, structural helix (side view) on the right
+    // half (D-A3). Portrait: log spans full width (helix is the backdrop above).
     const logTop = dividerY + 6 * s;
     const logBottom = y + h - 6 * s;
+    const logW = landscape ? w * 0.5 : w;
     const lineH = fontMD * 1.4;
     const rows = Math.max(0, Math.floor((logBottom - logTop) / lineH));
 
+    if (landscape) {
+      this.helix.draw(ctx, x + w * 0.5, logTop, w * 0.5, logBottom - logTop, "side", 1.0);
+    }
+
+    // Clip the log to its column so lines never spill into the helix half.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, logTop, logW - 8 * s, logBottom - logTop);
+    ctx.clip();
     ctx.font = `${fontMD}px ${mono}`;
     const lines = this.logq.lines;
     if (lines.length === 0) {
@@ -354,6 +378,7 @@ export class MonScanner {
         ctx.fillText(line, x + 8 * s, logBottom - lineH * (i + 1));
       }
     }
+    ctx.restore();
   }
 }
 
