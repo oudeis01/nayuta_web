@@ -81,7 +81,7 @@ export class MonScanner {
   private rEma = 0;
   private rEmaPeak = 0.001;
 
-  // background helix (cross-section view) behind the sentence area
+  // structural helix (side view) in the right half of the secondary region
   private helix = new Helix();
 
   private time = 0;
@@ -258,28 +258,56 @@ export class MonScanner {
     const aw = ctx.measureText(axis).width;
     ctx.fillText(axis, x + w - aw - 8 * s, y + 6 * s);
 
-    // Layout reflows on the rect's own aspect (D-A3), recomputed each frame so a
-    // resize flips it live. Landscape (the install's 1920x1080 monitors, and any
-    // wide web rect): sentence top full-width, then log left / helix right 50:50.
-    // Portrait (a tall web single-view): the current stacked layout, helix as the
-    // sentence backdrop.
+    // mon A reflows on the rect's own aspect (D-A3), recomputed each frame so a
+    // resize flips it live. In BOTH aspects the secondary region is split 50:50
+    // with the log on the left and the structural helix (side view) on the right;
+    // only the sentence placement changes. Portrait: sentence spans the top 35%,
+    // the log+helix fill the bottom 65% full-width. Landscape (the install's
+    // 1920x1080 monitors): sentence occupies the left 35% full-height, the
+    // log+helix fill the right 65%.
     const landscape = orient(w, h) === "landscape";
+    const topPad = 22 * s;
+    const edge = 6 * s;
 
-    // ── Sentence area (top 35%) ───────────────────────────────────────────────
-    const sentTop = y + 22 * s;
-    const sentH = h * 0.35;
-    const dividerY = sentTop + sentH;
-
-    // Portrait keeps the helix as a cross-section backdrop behind the sentence;
-    // landscape relocates it to the bottom-right half (drawn below the divider),
-    // leaving the sentence full-width, so skip the backdrop there.
-    if (!landscape) {
-      this.helix.draw(ctx, x + w * 0.6, sentTop, w * 0.4, sentH, "cross", 0.6);
+    // ── Region rects ──────────────────────────────────────────────────────────
+    let sentX: number, sentTop: number, sentW: number, sentBottom: number;
+    let logX: number, logTop: number, logW: number, logBottom: number;
+    let hxX: number, hxY: number, hxW: number, hxH: number;
+    if (landscape) {
+      sentX = x;
+      sentTop = y + topPad;
+      sentW = w * 0.35;
+      sentBottom = y + h - edge;
+      const secLeft = x + w * 0.35;
+      const half = w * 0.65 * 0.5;
+      logX = secLeft;
+      logTop = sentTop;
+      logW = half;
+      logBottom = y + h - edge;
+      hxX = secLeft + half;
+      hxY = logTop;
+      hxW = half;
+      hxH = logBottom - logTop;
+    } else {
+      sentX = x;
+      sentTop = y + topPad;
+      sentW = w;
+      sentBottom = sentTop + h * 0.35;
+      const secTop = sentBottom + edge;
+      logX = x;
+      logTop = secTop;
+      logW = w * 0.5;
+      logBottom = y + h - edge;
+      hxX = x + w * 0.5;
+      hxY = secTop;
+      hxW = w * 0.5;
+      hxH = logBottom - secTop;
     }
 
+    // ── Sentence ──────────────────────────────────────────────────────────────
     if (this.nTokens > 0) {
-      if (this.layoutDirty || this.layoutFs !== fontMD || this.layoutW !== w) {
-        this.rebuildLayout(ctx, fontMD, x, w, s);
+      if (this.layoutDirty || this.layoutFs !== fontMD || this.layoutW !== sentW) {
+        this.rebuildLayout(ctx, fontMD, sentX, sentW, s);
       }
       ctx.font = `${fontMD}px ${mono}`;
       const rNorm = this.rEmaPeak > 0 ? this.rEma / this.rEmaPeak : 0;
@@ -290,7 +318,7 @@ export class MonScanner {
       // sentence area we pin the bottom (newest) line to the area's bottom edge
       // instead of clipping new rows away (user 2026-05-31). Clip to the area so
       // partial rows cut cleanly.
-      const availH = dividerY - sentTop;
+      const availH = sentBottom - sentTop;
       let contentBottom = 0;
       for (let i = 0; i < this.layout.length; i++) {
         const b = this.layout[i].y + boxH;
@@ -299,13 +327,13 @@ export class MonScanner {
       const scrollY = Math.max(0, contentBottom - availH);
       ctx.save();
       ctx.beginPath();
-      ctx.rect(x, sentTop, w, availH);
+      ctx.rect(sentX, sentTop, sentW, availH);
       ctx.clip();
       for (let i = 0; i < this.layout.length; i++) {
         const tb = this.layout[i];
         const tx = tb.x;
         const ty = sentTop + tb.y - scrollY;
-        if (ty + boxH <= sentTop || ty >= dividerY) continue; // row off-screen
+        if (ty + boxH <= sentTop || ty >= sentBottom) continue; // row off-screen
         if (i === this.qPos) {
           const breath = 0.88 + 0.12 * (0.5 + 0.5 * Math.sin(this.time * 1.8 + rNorm * 6.28));
           const fill = Math.round(255 * breath);
@@ -328,54 +356,53 @@ export class MonScanner {
       ctx.restore();
     }
 
-    // Sub-progress bar (full width, just above the divider)
+    // Sub-progress bar (within the sentence column, at its bottom edge)
     if (this.subProgress > 0.005) {
       const barH = 3 * s;
-      const m = w * 0.03;
-      const x0 = x + m;
-      const fullW = w - m * 2;
-      const by = dividerY - barH - 2 * s;
+      const m = sentW * 0.03;
+      const x0 = sentX + m;
+      const fullW = sentW - m * 2;
+      const by = sentBottom - barH - 2 * s;
       ctx.fillStyle = "rgba(20,20,20,1)";
       ctx.fillRect(x0, by, fullW, barH);
       ctx.fillStyle = "rgba(180,180,180,1)";
       ctx.fillRect(x0, by, fullW * this.subProgress, barH);
     }
 
-    // Divider line
+    // Divider: horizontal under the sentence (portrait) or vertical between the
+    // sentence column and the secondary region (landscape).
     ctx.fillStyle = "rgba(30,30,30,1)";
-    ctx.fillRect(x + 8 * s, Math.round(dividerY) + 0.5, w - 16 * s, 1);
+    if (landscape) {
+      ctx.fillRect(Math.round(x + w * 0.35) + 0.5, sentTop, 1, sentBottom - sentTop);
+    } else {
+      ctx.fillRect(sentX + 8 * s, Math.round(sentBottom) + 0.5, sentW - 16 * s, 1);
+    }
 
-    // ── Log area (bottom band) — newest at the bottom ─────────────────────────
-    // Landscape: log on the left half, structural helix (side view) on the right
-    // half (D-A3). Portrait: log spans full width (helix is the backdrop above).
-    const logTop = dividerY + 6 * s;
-    const logBottom = y + h - 6 * s;
-    const logW = landscape ? w * 0.5 : w;
+    // ── Log (left of the secondary region) — newest at the bottom ─────────────
     const lineH = fontMD * 1.4;
     const rows = Math.max(0, Math.floor((logBottom - logTop) / lineH));
 
-    if (landscape) {
-      this.helix.draw(ctx, x + w * 0.5, logTop, w * 0.5, logBottom - logTop, "side", 1.0);
-    }
+    // Structural helix (side view) on the right of the secondary region.
+    this.helix.draw(ctx, hxX, hxY, hxW, hxH, "side", 1.0);
 
     // Clip the log to its column so lines never spill into the helix half.
     ctx.save();
     ctx.beginPath();
-    ctx.rect(x, logTop, logW - 8 * s, logBottom - logTop);
+    ctx.rect(logX, logTop, logW - 8 * s, logBottom - logTop);
     ctx.clip();
     ctx.font = `${fontMD}px ${mono}`;
     const lines = this.logq.lines;
     if (lines.length === 0) {
       if (this.time % 0.9 < 0.45) {
         ctx.fillStyle = "rgba(115,115,115,1)";
-        ctx.fillText("_", x + 8 * s, logTop);
+        ctx.fillText("_", logX + 8 * s, logTop);
       }
     } else {
       ctx.fillStyle = "rgba(153,153,153,1)";
       const n = Math.min(rows, lines.length);
       for (let i = 0; i < n; i++) {
         const line = lines[lines.length - 1 - i];
-        ctx.fillText(line, x + 8 * s, logBottom - lineH * (i + 1));
+        ctx.fillText(line, logX + 8 * s, logBottom - lineH * (i + 1));
       }
     }
     ctx.restore();
