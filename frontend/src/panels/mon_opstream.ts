@@ -1,5 +1,6 @@
 import type { OscEvent, OpRec } from "../stream/types";
 import { ResidualHelix, type HelixData } from "../geometry/residual_helix";
+import { LogQueue } from "./log_queue";
 
 // Monitor B — Op Stream. Faithful port of graphics_consumer/src/screens/
 // mon_opstream.cpp. Every captured OpRec (~1,092/s, already rate-limited at the
@@ -22,6 +23,15 @@ const POS_NA = 0xffff;
 // high-speed replay from formatting lines that would scroll straight off.
 const LOG_CAP = 512;
 const PAUSE_AFTER_LAYER = 0.5;
+// Paced-reveal tuning (plan B-1; first-pass defaults, user fine-tunes visually).
+// The ceiling is deliberately well below the ~1,092 lines/s arrival rate so the
+// reveal stays a calm few-lines-per-frame scroll that samples the stream, rather
+// than catching all the way up (which would just reproduce the wholesale-replace
+// feel B-1 reported). The flush sheds the rest and bounds latency.
+const PACE_RATE = 60; // baseline reveal floor, lines/s (~one line/frame @ 60fps)
+const PACE_DRAIN = 0.5; // catch-up time constant, s (reveal ~ backlog/drain)
+const PACE_MAXRATE = 240; // real-time reveal ceiling, lines/s (~4/frame)
+const PACE_FLUSHAT = 480; // pending cap; oldest beyond it are dropped (~2s latency)
 
 // 9-char fixed-width names, indexed by OpType (must match op_types.h).
 const OP_TYPE_NAMES = [
@@ -49,10 +59,21 @@ function opSym(t: number): string {
   }
 }
 
-interface Line {
+// Queue items are stored raw and formatted only when painted, so lines that
+// overflow the pace flush at high replay speed never cost a fmtRec() call.
+// A RecItem is one op; a SepItem is an axis separator (weak = head complete,
+// strong = layer complete).
+interface RecItem {
+  rec: OpRec;
+}
+interface SepItem {
   text: string;
-  sepWeak: boolean;
-  sepStrong: boolean;
+  strong: boolean;
+}
+type Item = RecItem | SepItem;
+
+function isSep(it: Item): it is SepItem {
+  return (it as SepItem).text !== undefined;
 }
 
 // "%+8.4f": signed, 4 decimals, min field width 8.
@@ -68,7 +89,13 @@ function pad3(n: number): string {
 }
 
 export class MonOpStream {
-  private log: Line[] = [];
+  // fps-paced scrolling log (plan B-1): pending ops reveal one line at a time,
+  // catching up under backlog and flushing on overflow, so the stream scrolls
+  // instead of being replaced wholesale each frame.
+  private logq = new LogQueue<Item>({
+    cap: LOG_CAP,
+    pace: { rate: PACE_RATE, drain: PACE_DRAIN, maxRate: PACE_MAXRATE, flushAt: PACE_FLUSHAT },
+  });
   private layer = 0;
   private paused = false;
   private pauseTimer = 0;
@@ -80,11 +107,6 @@ export class MonOpStream {
 
   setHelixData(d: HelixData | null): void {
     this.helix.setData(d);
-  }
-
-  private push(text: string, sepWeak = false, sepStrong = false): void {
-    this.log.push({ text, sepWeak, sepStrong });
-    if (this.log.length > LOG_CAP) this.log.shift();
   }
 
   private fmtRec(r: OpRec): string {
@@ -109,28 +131,30 @@ export class MonOpStream {
       this.pauseTimer -= dt;
       if (this.pauseTimer <= 0) {
         this.paused = false;
-        this.log.length = 0;
+        this.logq.clear();
       }
     }
 
     for (const ev of events) {
       if (ev.path === "/bert/token_att") {
-        this.push("-- HEAD COMPLETE --", true, false);
+        this.logq.enqueue({ text: "-- HEAD COMPLETE --", strong: false });
       } else if (ev.path === "/bert/layer") {
         this.layer = ev.args[0];
-        this.push(`=== LAYER ${this.layer} COMPLETE ===`, false, true);
+        this.logq.enqueue({ text: `=== LAYER ${this.layer} COMPLETE ===`, strong: true });
         this.paused = true;
         this.pauseTimer = PAUSE_AFTER_LAYER;
       }
     }
 
-    if (this.paused) return;
+    if (!this.paused) {
+      // Enqueue raw ops (formatted lazily on paint). Skip the leading lines that
+      // the pace flush would immediately drop when a single batch overflows.
+      const start = Math.max(0, ops.length - PACE_FLUSHAT);
+      for (let i = start; i < ops.length; i++) this.logq.enqueue({ rec: ops[i] });
+    }
 
-    // Only the last LOG_CAP records can survive on screen; skip formatting the
-    // rest when a single batch overflows (e.g. at high playback speed).
-    const start = Math.max(0, ops.length - LOG_CAP);
-    if (start > 0) this.log.length = 0;
-    for (let i = start; i < ops.length; i++) this.push(this.fmtRec(ops[i]));
+    // dt>0 gates the scroll so it holds in place while playback is paused.
+    this.logq.tick(dt > 0);
   }
 
   render(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
@@ -170,18 +194,24 @@ export class MonOpStream {
 
     // Paint the visible tail bottom-up so the newest line sits at the bottom.
     ctx.font = `${fontMD}px ${mono}`;
-    const n = Math.min(rows, this.log.length);
+    const lines = this.logq.lines;
+    const n = Math.min(rows, lines.length);
     for (let i = 0; i < n; i++) {
-      const line = this.log[this.log.length - 1 - i];
+      const item = lines[lines.length - 1 - i];
       const ly = bottom - lineH * (i + 1);
-      if (line.sepStrong) ctx.fillStyle = "rgba(255,255,255,0.9)";
-      else if (line.sepWeak) ctx.fillStyle = "rgba(89,89,89,1)";
-      else ctx.fillStyle = "rgba(217,217,217,1)";
-      ctx.fillText(line.text, x + padX, ly);
+      let text: string;
+      if (isSep(item)) {
+        ctx.fillStyle = item.strong ? "rgba(255,255,255,0.9)" : "rgba(89,89,89,1)";
+        text = item.text;
+      } else {
+        ctx.fillStyle = "rgba(217,217,217,1)";
+        text = this.fmtRec(item.rec);
+      }
+      ctx.fillText(text, x + padX, ly);
     }
 
     // Idle cursor — blinks at ~0.9s period when no data has arrived.
-    if (this.log.length === 0 && this.blink % 0.9 < 0.45) {
+    if (lines.length === 0 && this.blink % 0.9 < 0.45) {
       ctx.fillStyle = "rgba(115,115,115,1)";
       ctx.fillText("_", x + padX, top);
     }

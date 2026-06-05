@@ -1,5 +1,6 @@
 import type { OscEvent, OpRec } from "../stream/types";
 import { Helix } from "../geometry/helix";
+import { LogQueue } from "./log_queue";
 
 // Monitor A — Token Scanner. Faithful port of graphics_consumer/src/screens/
 // mon_scanner.cpp. The top third shows the sentence being processed (BERT
@@ -58,7 +59,10 @@ export class MonScanner {
   private layer = 0;
   private head = 0;
 
-  private log: string[] = [];
+  // Sampled op log. Passthrough LogQueue (no pace): the 1/300 op sampling below
+  // already paces it, so its current slow-stride feel is preserved (plan D-B1);
+  // the shared component only supplies the bounded buffer + clear.
+  private logq = new LogQueue<string>({ cap: LOG_MAX });
 
   // op-stream sub-progress
   private zmqQPos = -1;
@@ -97,8 +101,7 @@ export class MonScanner {
   }
 
   private pushLog(text: string): void {
-    this.log.push(text);
-    if (this.log.length > LOG_MAX) this.log.shift();
+    this.logq.enqueue(text);
   }
 
   update(events: OscEvent[], ops: OpRec[], dt: number): void {
@@ -115,7 +118,7 @@ export class MonScanner {
           this.qPos = -1;
           this.kPos = -1;
           this.seqWords.fill("");
-          this.log.length = 0;
+          this.logq.clear();
           this.zmqQPos = -1;
           this.opsSinceQ = 0;
           this.rCount = 0;
@@ -196,6 +199,10 @@ export class MonScanner {
         }
       }
     }
+
+    // Reveal queued lines (passthrough: paces with the sampling). dt>0 gates the
+    // scroll so it holds when playback is paused.
+    this.logq.tick(dt > 0);
   }
 
   // Rebuild the wrapped token layout. Wordpiece continuations ("##xx") attach to
@@ -333,16 +340,17 @@ export class MonScanner {
     const rows = Math.max(0, Math.floor((logBottom - logTop) / lineH));
 
     ctx.font = `${fontMD}px ${mono}`;
-    if (this.log.length === 0) {
+    const lines = this.logq.lines;
+    if (lines.length === 0) {
       if (this.time % 0.9 < 0.45) {
         ctx.fillStyle = "rgba(115,115,115,1)";
         ctx.fillText("_", x + 8 * s, logTop);
       }
     } else {
       ctx.fillStyle = "rgba(153,153,153,1)";
-      const n = Math.min(rows, this.log.length);
+      const n = Math.min(rows, lines.length);
       for (let i = 0; i < n; i++) {
-        const line = this.log[this.log.length - 1 - i];
+        const line = lines[lines.length - 1 - i];
         ctx.fillText(line, x + 8 * s, logBottom - lineH * (i + 1));
       }
     }
