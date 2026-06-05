@@ -1,6 +1,7 @@
 import type { OscEvent, OpRec } from "../stream/types";
 import { ResidualHelix, type HelixData } from "../geometry/residual_helix";
 import { LogQueue } from "./log_queue";
+import { orient } from "./aspect";
 
 // Monitor B — Op Stream. Faithful port of graphics_consumer/src/screens/
 // mon_opstream.cpp. Every captured OpRec (~1,092/s, already rate-limited at the
@@ -178,18 +179,43 @@ export class MonOpStream {
     const top = y + headerH;
     const lineH = fontMD * 1.4;
     const bottom = y + h - 8 * s;
-    const rows = Math.max(0, Math.floor((bottom - top) / lineH));
 
-    // Residual double helix in the right half (isolated canvas, fits + centres
-    // itself within this region). The log occupies the left column.
-    const helixW = w * 0.5;
-    this.helix.draw(ctx, x + w - helixW, top, helixW, h - headerH - 8 * s);
+    // Helix / log split reflows on the panel's own aspect (D-B3), recomputed each
+    // frame so a runtime resize flips it live. Landscape (the install's 1920x1080
+    // monitors, square treated as landscape): helix right half, log left half.
+    // Portrait (a tall single-view, w/h < 1.0): helix top half, log bottom half.
+    const landscape = orient(w, h) === "landscape";
+    let helixX: number, helixY: number, helixW: number, helixH: number;
+    let logX: number, logTop: number, logW: number, logBottom: number;
+    if (landscape) {
+      helixW = w * 0.5;
+      helixX = x + w - helixW;
+      helixY = top;
+      helixH = h - headerH - 8 * s;
+      logX = x;
+      logTop = top;
+      logW = w - helixW - 16 * s;
+      logBottom = bottom;
+    } else {
+      const half = (bottom - top) * 0.5;
+      helixX = x;
+      helixY = top;
+      helixW = w;
+      helixH = half;
+      logX = x;
+      logTop = top + half;
+      logW = w - 16 * s;
+      logBottom = bottom;
+    }
+    const rows = Math.max(0, Math.floor((logBottom - logTop) / lineH));
 
-    // Scrolling log in the left column; clip so long lines don't reach the helix.
-    const logW = w - helixW - 16 * s;
+    // Residual double helix (isolated canvas, fits + centres itself in its region).
+    this.helix.draw(ctx, helixX, helixY, helixW, helixH);
+
+    // Scrolling log; clip so long lines don't reach the helix region.
     ctx.save();
     ctx.beginPath();
-    ctx.rect(x, top, logW, bottom - top);
+    ctx.rect(logX, logTop, logW, logBottom - logTop);
     ctx.clip();
 
     // Paint the visible tail bottom-up so the newest line sits at the bottom.
@@ -198,7 +224,7 @@ export class MonOpStream {
     const n = Math.min(rows, lines.length);
     for (let i = 0; i < n; i++) {
       const item = lines[lines.length - 1 - i];
-      const ly = bottom - lineH * (i + 1);
+      const ly = logBottom - lineH * (i + 1);
       let text: string;
       if (isSep(item)) {
         ctx.fillStyle = item.strong ? "rgba(255,255,255,0.9)" : "rgba(89,89,89,1)";
@@ -207,13 +233,13 @@ export class MonOpStream {
         ctx.fillStyle = "rgba(217,217,217,1)";
         text = this.fmtRec(item.rec);
       }
-      ctx.fillText(text, x + padX, ly);
+      ctx.fillText(text, logX + padX, ly);
     }
 
     // Idle cursor — blinks at ~0.9s period when no data has arrived.
     if (lines.length === 0 && this.blink % 0.9 < 0.45) {
       ctx.fillStyle = "rgba(115,115,115,1)";
-      ctx.fillText("_", x + padX, top);
+      ctx.fillText("_", logX + padX, logTop);
     }
     ctx.restore();
   }
