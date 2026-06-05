@@ -145,7 +145,11 @@ export class Helix {
   // Draw-on self-construction (lazy-built routes; cycles family on each heartbeat).
   drawDur = 2.4; // seconds for one full-wireframe stroke
   morphDur = 0.9; // seconds to settle from the platonic cylinder to the real shape
-  private routes: number[][] | null = null;
+  // Routes are built per active-layer COUNT (not just the full 12). Live installs
+  // reset activeLayer to 0 on /bert/sequence_start and grow it slowly, so the helix
+  // sits at a partial layer count for long stretches; the draw-on must trace those
+  // partial wireframes too (each route covers ring + strand edges of its count).
+  private routeCache = new Map<number, number[][]>();
   private familyIdx = 0;
   private drawT = 0; // elapsed within the current stroke
   private drawing = true; // self-draw once on load, then on every heartbeat
@@ -160,9 +164,18 @@ export class Helix {
     this.regenAll();
   }
 
+  // buildHelixRoutes always yields 6 families regardless of layer count.
+  private routesFor(nLayers: number): number[][] {
+    let r = this.routeCache.get(nLayers);
+    if (!r) {
+      r = buildHelixRoutes(nLayers, NHEADS);
+      this.routeCache.set(nLayers, r);
+    }
+    return r;
+  }
+
   private startDraw(): void {
-    if (!this.routes) this.routes = buildHelixRoutes(NLAYERS, NHEADS);
-    this.familyIdx = (this.familyIdx + 1) % this.routes.length;
+    this.familyIdx = (this.familyIdx + 1) % 6;
     this.drawT = 0;
     this.drawing = true;
     this.morph = 0; // redraw the platonic ideal, then warp to real again
@@ -365,12 +378,12 @@ export class Helix {
     const mapX = (px: number) => cx0 + px * scale;
     const mapY = (py: number) => cy0 + py * scale;
 
-    // Draw-on: while a stroke is in progress (and the helix is full, which it
-    // always is in these captures), trace the single-stroke route from black so
-    // the cylinder visibly wires itself up. Otherwise hold the full wireframe.
-    if (this.drawing && active === NLAYERS - 1) {
-      if (!this.routes) this.routes = buildHelixRoutes(NLAYERS, NHEADS);
-      const seq = this.routes[this.familyIdx];
+    // Draw-on: while a stroke is in progress, trace the single-stroke route for the
+    // CURRENT layer count from black so the wireframe visibly wires itself up — at
+    // 1 ring or 12. (Previously gated on the full 12 layers, so a live install's
+    // long single-layer phase snapped the polygon in instead of tracing it.)
+    if (this.drawing) {
+      const seq = this.routesFor(active + 1)[this.familyIdx];
       const segTotal = seq.length - 1;
       const p = clampf(this.drawT / this.drawDur, 0, 1);
       const eased = 1 - (1 - p) * (1 - p); // ease-out

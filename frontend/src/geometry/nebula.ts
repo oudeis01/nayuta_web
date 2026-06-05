@@ -12,6 +12,12 @@
 const MAX_NODES = 44;
 const MAX_EDGES = 80;
 const TOP_NBRS = 3; // neighbors used per whisper
+// The marker/offset/lineWidth/sway literals below were tuned at this font size
+// (the --dev small panel, s≈1). They are raw px, so at a fullscreen panel the font
+// scales up while the markers stay tiny and the constellation loses visual mass —
+// the log then visually dominates (mon D feedback 2026-06-05). Scale them by
+// s = fontPx / REF_FONT so the nebula's weight tracks the panel size.
+const REF_FONT = 11;
 const REST_MIN = 0.35; // model-unit rest length floor
 const REST_SCALE = 0.95; // + dist * this
 const FLASH_DECAY = 1.6; // birth-flash fade rate
@@ -234,6 +240,9 @@ export class Nebula {
   ): void {
     if (this.nodes.length === 0) return;
 
+    // Panel scale: the raw-px literals were tuned at REF_FONT; track the panel size.
+    const s = fontPx / REF_FONT;
+
     let cx = 0;
     let cy = 0;
     for (const n of this.nodes) {
@@ -256,13 +265,13 @@ export class Nebula {
     const cx0 = ox + w * 0.5;
     const cy0 = oy + h * 0.5;
     // Parallax sway: nearer nodes (larger z) shift more — subtle 2.5D depth.
-    const swx = Math.sin(this.t * 0.13) * this.swayPx;
-    const swy = Math.cos(this.t * 0.19) * this.swayPx;
+    const swx = Math.sin(this.t * 0.13) * this.swayPx * s;
+    const swy = Math.cos(this.t * 0.19) * this.swayPx * s;
     const mapX = (n: Node) => cx0 + (n.x - this.cxS) * this.scaleS + (n.z - 0.6) * swx;
     const mapY = (n: Node) => cy0 + (n.y - this.cyS) * this.scaleS + (n.z - 0.6) * swy;
 
     // Edges — faint, brighter on birth flash.
-    ctx.lineWidth = 1;
+    ctx.lineWidth = Math.max(1, s);
     for (const e of this.edges) {
       const ia = this.nodeIndex(e.a);
       const ib = this.nodeIndex(e.b);
@@ -284,17 +293,17 @@ export class Nebula {
       const py = mapY(n);
       const depth = clampf((n.z - 0.3) / 0.7, 0.0, 1.0); // 0 far .. 1 near
       const na = clampf((0.35 + 0.45 * depth + 0.2 * n.flash) * baseAlpha, 0.0, 1.0);
-      const rad = 1.6 + 1.4 * depth + 1.5 * n.flash;
+      const rad = (1.6 + 1.4 * depth + 1.5 * n.flash) * s;
       ctx.fillStyle = `rgba(235,235,235,${na})`;
       ctx.strokeStyle = `rgba(235,235,235,${na})`;
 
       if (n.bridge) {
         // diamond marker for bridge words
         ctx.beginPath();
-        ctx.moveTo(px, py - rad - 1.0);
-        ctx.lineTo(px + rad + 1.0, py);
-        ctx.lineTo(px, py + rad + 1.0);
-        ctx.lineTo(px - rad - 1.0, py);
+        ctx.moveTo(px, py - rad - s);
+        ctx.lineTo(px + rad + s, py);
+        ctx.lineTo(px, py + rad + s);
+        ctx.lineTo(px - rad - s, py);
         ctx.closePath();
         ctx.stroke();
       } else {
@@ -306,7 +315,7 @@ export class Nebula {
       // word label, dimmer than its node, offset up-right
       const la = clampf((0.22 + 0.4 * depth + 0.3 * n.flash) * baseAlpha, 0.0, 1.0);
       ctx.fillStyle = `rgba(210,210,210,${la})`;
-      ctx.fillText(n.word, px + rad + 3.0, py - fontPx * 0.5);
+      ctx.fillText(n.word, px + rad + 3.0 * s, py - fontPx * 0.5);
     }
   }
 }

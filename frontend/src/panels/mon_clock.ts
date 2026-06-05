@@ -14,7 +14,13 @@ const OP_TOTAL = 5483624515190808.0;
 const YR_SEC = 365.25 * 86400.0;
 const REF_H = 600; // reference panel height the pixel constants were tuned for
 
-type DState = "idle" | "scramble" | "pause";
+// op_count count-up (C-2, user 2026-06-05): a monotonic ease-out toward the latest
+// target — no random slot-machine scramble, no mid-pause. Speed is proportional to
+// the remaining distance (ease-out); a hard cap snaps any single catch-up running
+// longer than COUNT_CAP so the asymptote never lingers.
+const COUNT_TAU = 0.3; // ease-out time constant (s)
+const COUNT_CAP = 1.5; // max seconds for one catch-up before snapping
+const BIN_BITS = 43; // remaining-seconds binary counter width (16万년 ≈ 5.0e12 s < 2^43)
 
 function fmtDuration(sec: number): string {
   if (sec <= 0 || sec !== sec) return "--yr ---d ---h --m --s";
@@ -49,15 +55,12 @@ function float32Ulp(x: number): number {
 }
 
 export class MonClock {
-  private dstate: DState = "idle";
-  private stateTimer = 0;
-
   private dDisplay = new Array<number>(MAX_DIGITS).fill(0);
-  private dTarget = new Array<number>(MAX_DIGITS).fill(0);
-  private dChanged = new Array<boolean>(MAX_DIGITS).fill(false);
   private nDisplayDigits = 1;
 
-  private displayVal = 0;
+  private displayVal = 0; // eased op_count actually shown
+  private countTarget = 0; // latest op_count target
+  private capClock = 0; // time spent on the current catch-up (for COUNT_CAP)
   private targetQueue: number[] = [];
 
   private elapsedTotal = 0;
@@ -107,28 +110,6 @@ export class MonClock {
     return { digits, n };
   }
 
-  private startScramble(target: number, duration: number): boolean {
-    const cur = this.decompose(this.displayVal);
-    const tgt = this.decompose(target);
-    this.dTarget = tgt.digits;
-    this.nDisplayDigits = Math.max(cur.n, tgt.n);
-
-    let any = false;
-    for (let i = 0; i < this.nDisplayDigits; i++) {
-      const c = i < cur.n ? cur.digits[i] : 0;
-      const t = i < tgt.n ? tgt.digits[i] : 0;
-      this.dChanged[i] = c !== t;
-      if (!this.dChanged[i]) this.dDisplay[i] = c;
-      any = any || this.dChanged[i];
-    }
-    if (!any) {
-      this.displayVal = target;
-      return false;
-    }
-    this.stateTimer = duration;
-    return true;
-  }
-
   update(events: OscEvent[], _ops: OpRec[], dt: number): void {
     this.elapsedTotal += dt;
     this.axis1Timer = Math.max(0, this.axis1Timer - dt);
@@ -170,51 +151,38 @@ export class MonClock {
       }
     }
 
-    // Axis flush: clear queue, fast+long scramble to latest.
-    if (this.axisFlush) {
-      if (this.targetQueue.length > 0) {
-        const latest = this.targetQueue[this.targetQueue.length - 1];
-        this.targetQueue.length = 0;
-        if (this.startScramble(latest, 0.6)) this.dstate = "scramble";
+    // Adopt the latest op_count target (monotonic) and ease the display toward it.
+    if (this.targetQueue.length > 0) {
+      const latest = this.targetQueue[this.targetQueue.length - 1];
+      if (latest > this.countTarget) {
+        this.countTarget = latest;
+        this.capClock = 0; // restart the cap window for this new gap
       }
+      this.targetQueue.length = 0;
+    }
+    if (this.axisFlush) {
+      this.capClock = 0; // a real axis boundary re-anchors the catch-up window
       this.axisFlush = false;
     }
 
-    switch (this.dstate) {
-      case "idle":
-        if (this.targetQueue.length > 0) {
-          let target: number;
-          if (this.targetQueue.length > 10) {
-            target = this.targetQueue[this.targetQueue.length - 1];
-            this.targetQueue.length = 0;
-          } else {
-            target = this.targetQueue.shift()!;
-          }
-          const dur = Math.min(0.4, Math.max(0.1, this.arrivalEma * 0.3));
-          if (this.startScramble(target, dur)) this.dstate = "scramble";
-        }
-        break;
-      case "scramble":
-        this.stateTimer -= dt;
-        for (let i = 0; i < this.nDisplayDigits; i++)
-          if (this.dChanged[i]) this.dDisplay[i] = Math.floor(Math.random() * 10);
-        if (this.stateTimer <= 0) {
-          for (let i = 0; i < this.nDisplayDigits; i++) this.dDisplay[i] = this.dTarget[i];
-          this.displayVal = 0;
-          let mul = 1;
-          for (let i = 0; i < this.nDisplayDigits; i++) {
-            this.displayVal += this.dDisplay[i] * mul;
-            mul *= 10;
-          }
-          this.stateTimer = 0.45 + Math.floor(Math.random() * 100) * 0.001;
-          this.dstate = "pause";
-        }
-        break;
-      case "pause":
-        this.stateTimer -= dt;
-        if (this.stateTimer <= 0) this.dstate = "idle";
-        break;
+    // Ease-out: speed proportional to the remaining distance; COUNT_CAP snaps any
+    // single catch-up that runs too long so the asymptote never lingers. Monotonic,
+    // no randomness, no mid-pause.
+    const remaining = this.countTarget - this.displayVal;
+    if (remaining > 0.5) {
+      this.capClock += dt;
+      if (this.capClock >= COUNT_CAP) {
+        this.displayVal = this.countTarget;
+      } else {
+        this.displayVal += remaining * (1 - Math.exp(-dt / COUNT_TAU));
+        if (this.countTarget - this.displayVal < 0.5) this.displayVal = this.countTarget;
+      }
+    } else {
+      this.displayVal = this.countTarget;
     }
+    const dec = this.decompose(Math.floor(this.displayVal));
+    this.dDisplay = dec.digits;
+    this.nDisplayDigits = dec.n;
 
     // Remaining-time estimate: re-anchor on clock tick (rate-based, EMA-smoothed,
     // ratcheted down); free-run countdown 1s/wall-second between ticks.
@@ -299,13 +267,39 @@ export class MonClock {
     centerText("remaining", centerY + 42 * s, `${fontSM}px ${mono}`, grey(0.22));
 
     // main remaining time (ratcheted EMA)
-    centerText(fmtDuration(this.remainDisplay), centerY + 56 * s, `${fontLG}px ${mono}`, grey(0.8));
+    const remStr = fmtDuration(this.remainDisplay);
+    centerText(remStr, centerY + 56 * s, `${fontLG}px ${mono}`, grey(0.8));
+
+    // ── Binary counter: remaining seconds as 43 bits (cf. Counter 2024) ──────────
+    // One square per bit, MSB left, row width = the ETA text width above. 0 = black
+    // borderless (blends into the bg), 1 = white (alpha 100%). Digital finitude made
+    // literal: the whole work's length counted down in binary.
+    ctx.font = `${fontLG}px ${mono}`;
+    const etaW = ctx.measureText(remStr).width;
+    const binTop = centerY + 56 * s + fontLG + 6 * s;
+    const binLeft = cx - etaW / 2;
+    const cellW = etaW / BIN_BITS;
+    const binBottom = binTop + cellW;
+    if (this.remainDisplay > 0 && etaW > 0) {
+      const remSec = Math.floor(this.remainDisplay);
+      ctx.fillStyle = "rgba(255,255,255,1)";
+      const ch = Math.max(1, Math.round(cellW));
+      const ty = Math.round(binTop);
+      for (let i = 0; i < BIN_BITS; i++) {
+        // bit (BIN_BITS-1-i): MSB at i=0. 43 bits exceed 32, so extract by division.
+        const bit = Math.floor(remSec / Math.pow(2, BIN_BITS - 1 - i)) % 2;
+        if (bit !== 1) continue; // 0 = borderless black = draw nothing
+        const x0 = Math.round(binLeft + i * cellW);
+        const x1 = Math.round(binLeft + (i + 1) * cellW);
+        ctx.fillRect(x0, ty, Math.max(1, x1 - x0), ch);
+      }
+    }
 
     // Ghost + ε + quantization gauge
     if (this.remainGhost > 0 && this.remainDisplay > 0) {
       const deltaYr = (this.remainGhost - this.remainSmooth) / YR_SEC;
       const ghostStr = fmtDuration(this.remainGhost);
-      const rawY = centerY + 88 * s;
+      const rawY = binBottom + 14 * s;
       centerText(ghostStr, rawY, `${fontLG}px ${mono}`, grey(0.25));
 
       const ulp = float32Ulp(this.elapsed);
