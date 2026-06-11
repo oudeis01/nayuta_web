@@ -54,6 +54,10 @@ export class AudioEngine {
   private cache = new Map<string, AudioBuffer>();
   private loading = new Set<string>();
 
+  // Outstanding neighbor/echo timeouts, so a corpus switch can cancel the cloud
+  // tail that the old corpus scheduled (reset()).
+  private pendingTimers: ReturnType<typeof setTimeout>[] = [];
+
   private discourse: Discourse = { core: new Set(), marker: new Set(), ids: new Set() };
 
   // Base URL for opus assets. Cloudflare R2 public bucket (prefix "audio/") in
@@ -110,6 +114,37 @@ export class AudioEngine {
 
   disable(): void {
     void this.ctx?.suspend();
+  }
+
+  // Hard reset for a corpus switch: cut every voice currently sounding and cancel
+  // the scheduled cloud tail, so the old corpus goes fully silent before the new
+  // one loads. Keeps the context running and the decoded LRU (opus assets are
+  // keyed by lemma, corpus-independent) so the new corpus restarts cleanly. New
+  // whisper events after the swap rebuild the cloud from scratch.
+  reset(): void {
+    for (const id of this.pendingTimers) clearTimeout(id);
+    this.pendingTimers = [];
+    if (!this.ctx) return;
+    // Replacing the master node detaches every source feeding it, silencing all
+    // in-flight buffers at once; reconnect a fresh master for the new corpus.
+    try {
+      this.master.disconnect();
+    } catch {
+      // already disconnected — nothing to do
+    }
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 1;
+    this.master.connect(this.ctx.destination);
+  }
+
+  // Track a scheduled voice so reset() can cancel it. Prunes the id when it fires.
+  private later(fn: () => void, ms: number): void {
+    const id = setTimeout(() => {
+      const i = this.pendingTimers.indexOf(id);
+      if (i >= 0) this.pendingTimers.splice(i, 1);
+      fn();
+    }, ms);
+    this.pendingTimers.push(id);
   }
 
   private async loadDiscourse(): Promise<void> {
@@ -202,7 +237,7 @@ export class AudioEngine {
     for (let k = 0; k < n; k++) {
       const delay = (k + 1) * interval + (Math.random() - 0.5) * 0.3;
       const ePan = Math.max(-1, Math.min(1, basePan + (Math.random() * 2 - 1) * PAN_JITTER * 2));
-      setTimeout(() => {
+      this.later(() => {
         this.getOrLoad(lid, vidx, accent, (b) => this.playVoice(b, TRIG_AMP, ePan));
       }, delay * 1000);
     }
@@ -258,7 +293,7 @@ export class AudioEngine {
       const nPan = Math.max(-1, Math.min(1, pan + (Math.random() * 2 - 1) * PAN_JITTER));
       const nAccent = this.pickAccent(); // each neighbor is its own utterance
 
-      setTimeout(() => {
+      this.later(() => {
         this.getOrLoad(nLid, nVidx, nAccent, (b) => this.playVoice(b, nAmp, nPan));
         this.maybeEcho(nLid, nVidx, nAccent, nPan);
       }, delay * 1000);

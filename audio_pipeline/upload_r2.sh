@@ -10,7 +10,7 @@
 # pointing at your R2 endpoint + access keys. Then pass --remote <name>:<bucket>.
 #
 # Usage:
-#   upload_r2.sh --src ./opus --remote r2:namedrop-web --prefix audio [--dry-run]
+#   upload_r2.sh --src ./opus --remote r2:nayuta-web --prefix audio [--dry-run]
 #
 #   --src    DIR        local opus dir            (required)
 #   --remote NAME:BUCKET rclone remote + bucket   (required)

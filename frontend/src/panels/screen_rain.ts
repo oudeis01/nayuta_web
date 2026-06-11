@@ -146,7 +146,12 @@ export class ScreenRain {
       const qValid = (rec.flags & 1) !== 0 && rec.qPos !== POS_NA;
       const kValid = (rec.flags & 2) !== 0 && rec.kPos !== POS_NA;
       if (rec.opType === OP_MUL_ATTN_QK && qValid && kValid) {
-        if (rec.qPos < NX && rec.kPos < NY) cells[rec.qPos * NY + rec.kPos] = 1.0;
+        // k (key pos) shares the q absolute-position scale (0..NX); bin it into the
+        // NY rows by the same ratio so every key position shows instead of dropping k>=NY.
+        if (rec.qPos < NX) {
+          const kr = Math.min(NY - 1, ((rec.kPos * NY) / NX) | 0);
+          cells[rec.qPos * NY + kr] = 1.0;
+        }
         this.phase = Phase.Attention;
         continue; // attention recs paint at (q,k), not in (a,r) space
       }

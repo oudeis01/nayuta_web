@@ -1,4 +1,3 @@
-import { decompress } from "fzstd";
 import type { EventStream, OscEvent, OpRec, ResidualRec } from "./types";
 
 // Replays a captured session from its zstd-compressed event log.
@@ -28,39 +27,60 @@ import type { EventStream, OscEvent, OpRec, ResidualRec } from "./types";
 // bert --residual-basis; older captures contain only OpMsg frames (reserved 0).
 const MSG_RESIDUAL = 1;
 
-// Fetch a URL into a Uint8Array, reporting download progress (0..1) as bytes
-// arrive. Used to drive the boot loader bar from the dominant ops.bin.zst fetch.
-// Falls back to a plain arrayBuffer read when the body cannot be streamed or the
-// server omits content-length (progress then jumps straight to 1 on completion).
-async function fetchBytes(
-  url: string,
+// The fetch + zstd decompress lives in a shared Web Worker (decode_worker.ts) so
+// the synchronous ~180 MB decompress never blocks the main thread / animation.
+// One worker serves the whole page; jobs are keyed by id and the latest caller
+// wins (DumpAdapter awaits its own job's result). The worker reports download
+// progress and finally returns the parsed OscEvent[] plus the decompressed ops
+// buffer as a Transferable.
+type DonePayload = { events: OscEvent[]; opsBuffer: ArrayBuffer | null };
+type WorkerResp =
+  | { id: number; type: "progress"; frac: number; stage: string }
+  | { id: number; type: "done"; events: OscEvent[]; opsBuffer: ArrayBuffer | null }
+  | { id: number; type: "error"; message: string };
+
+interface Job {
+  resolve: (p: DonePayload) => void;
+  reject: (e: Error) => void;
+  onProgress?: (frac: number) => void;
+}
+
+let _worker: Worker | null = null;
+let _jobSeq = 0;
+const _jobs = new Map<number, Job>();
+
+function getWorker(): Worker {
+  if (_worker) return _worker;
+  const w = new Worker(new URL("./decode_worker.ts", import.meta.url), { type: "module" });
+  w.onmessage = (e: MessageEvent<WorkerResp>) => {
+    const m = e.data;
+    const job = _jobs.get(m.id);
+    if (!job) return;
+    if (m.type === "progress") {
+      job.onProgress?.(m.frac);
+      return;
+    }
+    _jobs.delete(m.id);
+    if (m.type === "error") job.reject(new Error(m.message));
+    else job.resolve({ events: m.events, opsBuffer: m.opsBuffer });
+  };
+  _worker = w;
+  return w;
+}
+
+// Run one fetch+decompress job in the worker. The progress fraction is absolute
+// (events 0..0.08, ops 0.08..1), matching the bar split the host expects.
+function decodeJob(
+  base: string,
+  ops: boolean,
   onProgress?: (frac: number) => void,
-): Promise<Uint8Array> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`fetch ${url}: ${res.status}`);
-  const total = Number(res.headers.get("content-length")) || 0;
-  if (!res.body || !onProgress || !total) {
-    const buf = new Uint8Array(await res.arrayBuffer());
-    onProgress?.(1);
-    return buf;
-  }
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let loaded = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    loaded += value.length;
-    onProgress(Math.min(1, loaded / total));
-  }
-  const out = new Uint8Array(loaded);
-  let off = 0;
-  for (const c of chunks) {
-    out.set(c, off);
-    off += c.length;
-  }
-  return out;
+): Promise<DonePayload> {
+  const id = ++_jobSeq;
+  const w = getWorker();
+  return new Promise<DonePayload>((resolve, reject) => {
+    _jobs.set(id, { resolve, reject, onProgress });
+    w.postMessage({ id, base, ops });
+  });
 }
 
 interface OpFrame {
@@ -151,37 +171,26 @@ export class DumpAdapter implements EventStream {
     opts: { ops?: boolean } = {},
     onProgress?: (frac: number) => void,
   ): Promise<void> {
-    // events.jsonl.zst is small next to ops.bin.zst, so it gets the first 8% of
-    // the bar; the heavy ops fetch (when mounted) drives the remaining 92%.
-    const comp = await fetchBytes(`${this.baseUrl}/events.jsonl.zst`, (p) =>
-      onProgress?.(p * 0.08),
-    );
-    const raw = decompress(comp);
-    const text = new TextDecoder().decode(raw);
-
-    const evs: OscEvent[] = [];
-    for (const line of text.split("\n")) {
-      if (!line) continue;
-      const o = JSON.parse(line);
-      evs.push({ tsNs: o.ts_ns, path: o.path, types: o.types, args: o.args });
-    }
-    evs.sort((a, b) => a.tsNs - b.tsNs);
-    this.events = evs;
-    this.t0 = evs.length ? evs[0].tsNs : 0;
+    // Fetch + decompress run in the worker (off the main thread); we get back the
+    // parsed events and the decompressed ops buffer (Transferable). Progress is
+    // already absolute (events 0..0.08, ops 0.08..1).
+    const { events, opsBuffer } = await decodeJob(this.baseUrl, !!opts.ops, onProgress);
+    this.events = events;
+    this.t0 = events.length ? events[0].tsNs : 0;
     this.idx = 0;
     this.playT = 0;
-
-    if (opts.ops) await this.loadOps((p) => onProgress?.(0.08 + p * 0.92));
-    else onProgress?.(1);
+    if (opsBuffer) this.indexOps(opsBuffer);
+    onProgress?.(1);
   }
 
-  // Decompress ops.bin and index its frames without materializing records. Each
-  // frame stores its capture ts (same clock as the OSC events, so the two share
-  // one playback timeline) and where its records live in the resident buffer.
-  private async loadOps(onProgress?: (frac: number) => void): Promise<void> {
-    const comp = await fetchBytes(`${this.baseUrl}/ops.bin.zst`, onProgress);
-    const raw = decompress(comp);
-    const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  // Index the decompressed ops buffer's frames without materializing records.
+  // Cheap (proportional to frame count, reads frame headers only); the heavy
+  // fetch+decompress already ran in the worker. Each frame stores its capture ts
+  // (same clock as the OSC events, so the two share one playback timeline) and
+  // where its records live in the resident buffer.
+  private indexOps(buffer: ArrayBuffer): void {
+    const raw = new Uint8Array(buffer);
+    const dv = new DataView(buffer);
 
     const frames: OpFrame[] = [];
     const resFrames: ResFrame[] = [];

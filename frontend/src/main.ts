@@ -78,10 +78,22 @@ function setLoadProgress(frac: number, stage?: string) {
   if (loaderPct) loaderPct.textContent = `${Math.round(p * 100)}%`;
   if (stage && loaderStage) loaderStage.textContent = stage;
 }
+// Reveal the loader (reused on corpus switches, not just boot): reset the bar and
+// clear the fade so it overlays the wall while the next dump loads.
+function showLoader(stage: string) {
+  if (!loaderEl) return;
+  loaderEl.style.display = "";
+  loaderEl.classList.remove("done");
+  setLoadProgress(0, stage);
+}
+// Fade the loader out and park it (display:none) so it can be shown again on the
+// next switch. Kept in the DOM rather than removed, unlike a one-shot boot loader.
 function hideLoader() {
   if (!loaderEl) return;
   loaderEl.classList.add("done");
-  setTimeout(() => loaderEl.remove(), 450);
+  setTimeout(() => {
+    loaderEl.style.display = "none";
+  }, 450);
 }
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -178,8 +190,10 @@ let residualMeans: HelixData | null = null;
 
 let adapter: DumpAdapter;
 let topPanel: Panel | null = null; // Screen 0, the full-width top band
-let topOps = false;
 let slots: Slot[] = []; // A–F monitor strip (bottom)
+// Monotonic load token: each loadTag() bumps it, so a switch that is superseded
+// by a newer one before its dump finishes discards its result (latest wins).
+let loadGen = 0;
 
 // UI meta-info (action plan §10): the capture's honest provenance, shown as a
 // persistent corner label. The honest framing — length, corpus, data mode — is
@@ -203,11 +217,41 @@ function applySpeed() {
   speedLbl.textContent = `${SPEEDS[speedIdx]}x`;
 }
 
-async function loadTag(tag: string, onProgress?: (frac: number) => void) {
+// Load a capture tag and, once its dump is ready, atomically swap the whole wall
+// to it. On a corpus switch this is deliberately a hard cut: the running corpus
+// freezes (timeline + audio) the instant the switch starts, and the new corpus
+// only appears — from position 0, every monitor and the audio reset — when the
+// load completes and the loader hides. Returns false if a newer switch superseded
+// this one mid-load (its result is discarded; the newer call owns the swap).
+async function loadTag(tag: string, onProgress?: (frac: number) => void): Promise<boolean> {
+  const gen = ++loadGen;
+  // Freeze the running corpus immediately: stop advancing the timeline and cut
+  // all audio (in-flight voices + the scheduled cloud tail). No-op on first boot
+  // (no adapter / no audio context yet). The loader overlay covers the frozen
+  // wall until the new dump is ready.
+  adapter?.pause();
+  audio.reset();
+
   const base = `${CAPTURE_BASE}/${SESSION}/${tag}`;
   const a = new DumpAdapter(base);
 
-  // Fresh panels per tag so replay state (counters, logs) resets cleanly.
+  // The canonical aggregate layout always mounts ops-consuming panels (rain +
+  // scanner / opstream / mandala / entropy), so the ops stream is always needed.
+  const needOps = true;
+  const [, manifest] = await Promise.all([
+    a.load({ ops: needOps }, onProgress),
+    fetch(`${base}/manifest.json`).then((r) => (r.ok ? r.json() : null)),
+  ]);
+  // A newer switch superseded this one while it loaded — discard silently.
+  if (gen !== loadGen) return false;
+
+  // Build fresh panels only now (after the load resolves) and swap atomically, so
+  // the wall never shows new empty panels fed by the old timeline mid-load.
+  // Canonical aggregate layout (design doc §0-1): Screen 0 across the top band,
+  // then the A–F monitor strip below at 17:17:9:17:17:9. Monitors E and F run the
+  // canonical pre-attention mode (E = (a,r) topology heatmap, F = |R| magnitude),
+  // both fed by the OpRec stream — the same view the install shows until the run
+  // reaches the attention stage (which these captures never do).
   const rain = new ScreenRain();
   const scanner = new MonScanner();
   scanner.setVocab(bertVocab);
@@ -216,16 +260,9 @@ async function loadTag(tag: string, onProgress?: (frac: number) => void) {
   const clock = new MonClock();
   const whisper = new MonWhisper();
   whisper.setLemmaDict(lemmaDict);
-
-  // Canonical aggregate layout (design doc §0-1): Screen 0 across the top band,
-  // then the A–F monitor strip below at 17:17:9:17:17:9. Monitors E and F run the
-  // canonical pre-attention mode (E = (a,r) topology heatmap, F = |R| magnitude),
-  // both fed by the OpRec stream — the same view the install shows until the run
-  // reaches the attention stage (which these captures never do).
   const mandala = new MonMandala();
   const entropy = new MonEntropy();
   topPanel = rain;
-  topOps = true;
   slots = [
     { panel: scanner, weight: 17, ops: true },
     { panel: opstream, weight: 17, ops: true },
@@ -234,13 +271,6 @@ async function loadTag(tag: string, onProgress?: (frac: number) => void) {
     { panel: mandala, weight: 17, ops: true },
     { panel: entropy, weight: 9, ops: true },
   ];
-
-  // Only pay the ops.bin fetch/decompress when a mounted panel consumes it.
-  const needOps = topOps || slots.some((s) => s.ops);
-  const [, manifest] = await Promise.all([
-    a.load({ ops: needOps }, onProgress),
-    fetch(`${base}/manifest.json`).then((r) => (r.ok ? r.json() : null)),
-  ]);
   adapter = a;
 
   const cs = manifest?.corpus_sidecar;
@@ -261,11 +291,28 @@ async function loadTag(tag: string, onProgress?: (frac: number) => void) {
   pendingOps = [];
   adapter.onOsc((ev) => pending.push(ev));
   adapter.onOpRec((rec) => pendingOps.push(rec));
+
+  // Reset-start: a fresh DumpAdapter is already at position 0 / idx 0. Begin
+  // playing (not paused) at the current speed, so the new corpus starts clean.
+  paused = false;
+  pauseBtn.textContent = "pause";
   applySpeed();
-  if (paused) adapter.pause();
+  adapter.resume();
+  return true;
 }
 
-sessionSel.addEventListener("change", () => loadTag(sessionSel.value));
+// Corpus switch via the dropdown: show the loader (reused from boot), drive its
+// bar from the worker's byte progress, and hide it once the new corpus is swapped
+// in. A superseded load (applied === false) leaves the loader for the newer one.
+async function switchTag(tag: string): Promise<void> {
+  showLoader("loading op stream");
+  const applied = await loadTag(tag, (p) => setLoadProgress(p, "loading op stream"));
+  if (applied) {
+    setLoadProgress(1, "ready");
+    hideLoader();
+  }
+}
+sessionSel.addEventListener("change", () => void switchTag(sessionSel.value));
 slowBtn.addEventListener("click", () => {
   speedIdx = Math.max(0, speedIdx - 1);
   applySpeed();
@@ -374,7 +421,7 @@ function updateMetaLine() {
 function modalHtml(): string {
   const views = VIEW_LABELS.map((label, i) => `<kbd>${i + 1}</kbd> ${label}`).join("<br>");
   return `
-    <h2>aftertheory · bert wall</h2>
+    <h2>Nayuta: The Transformer · bert wall</h2>
     <h3>capture</h3>
     <dl>
       <dt>data</dt><dd>${DATA_MODE}</dd>

@@ -22,7 +22,7 @@
 #
 # Usage:
 #   upload_subset_r2.sh <remote> <bucket> [--dry-run]
-#   e.g. upload_subset_r2.sh r2aftertheory aftertheory-web
+#   e.g. upload_subset_r2.sh r2nayuta nayuta-web
 set -euo pipefail
 
 REMOTE="${1:?rclone remote name}"
