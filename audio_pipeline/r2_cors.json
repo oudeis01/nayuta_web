@@ -3,6 +3,8 @@
     {
       "allowed": {
         "origins": [
+          "https://nayuta.choiharam.com",
+          "https://nayuta.pages.dev",
           "https://aftertheory.choiharam.com",
           "https://aftertheory.pages.dev",
           "http://localhost:5173",
