@@ -11,20 +11,17 @@ import { AudioEngine } from "./audio/engine";
 import { parseHelixData, type HelixData } from "./geometry/residual_helix";
 import type { OscEvent, OpRec } from "./stream/types";
 
-const SESSION = "session_001";
+// The web full-dump is a single sequence (full-data dump scoping, 2026-06-14):
+// one lossless K=8 capture, no corpus switching. CAPTURE is the deploy path
+// segment under the capture base; the audience reads the human corpus name from
+// the manifest sidecar, not this path.
+const CAPTURE = "session_001/fulldump_kittler";
 // Asset bases (action plan §3-1, §12): the static frontend ships on Cloudflare
-// Pages, but the heavy assets — opus audio and the per-tag ops.bin.zst dumps,
-// which exceed the Pages 25 MB/file limit — live in the public R2 bucket. Both
+// Pages, but the heavy assets — opus audio and the ops.bin.zst dump, which
+// exceeds the Pages 25 MB/file limit — live in the public R2 bucket. Both
 // default to a same-origin path so local dev still serves from public/.
 const CAPTURE_BASE = (import.meta.env.VITE_CAPTURE_BASE ?? "/captures").replace(/\/$/, "");
 const AUDIO_BASE = import.meta.env.VITE_AUDIO_BASE; // undefined → AudioEngine default
-const TAGS = [
-  "tate_nnn",
-  "mousse_irigaray",
-  "artforum_identity",
-  "ars_baecker",
-  "ars_bias",
-];
 const SPEEDS = [1, 2, 5, 10, 30, 60];
 
 // Every panel speaks this contract: digest the frame's events, then paint into
@@ -78,16 +75,8 @@ function setLoadProgress(frac: number, stage?: string) {
   if (loaderPct) loaderPct.textContent = `${Math.round(p * 100)}%`;
   if (stage && loaderStage) loaderStage.textContent = stage;
 }
-// Reveal the loader (reused on corpus switches, not just boot): reset the bar and
-// clear the fade so it overlays the wall while the next dump loads.
-function showLoader(stage: string) {
-  if (!loaderEl) return;
-  loaderEl.style.display = "";
-  loaderEl.classList.remove("done");
-  setLoadProgress(0, stage);
-}
-// Fade the loader out and park it (display:none) so it can be shown again on the
-// next switch. Kept in the DOM rather than removed, unlike a one-shot boot loader.
+// Fade the loader out and park it (display:none). The single-corpus full-dump
+// loads once at boot, so the loader is only ever shown then.
 function hideLoader() {
   if (!loaderEl) return;
   loaderEl.classList.add("done");
@@ -101,16 +90,10 @@ const canvas = document.createElement("canvas");
 app.appendChild(canvas);
 const ctx = canvas.getContext("2d")!;
 
-// HUD: session picker + playback controls (dev-time; the install pace is 1x).
+// HUD: playback controls (dev-time; the install pace is 1x). The single-corpus
+// full-dump has no session picker.
 const hud = document.createElement("div");
 hud.id = "hud";
-const sessionSel = document.createElement("select");
-for (const t of TAGS) {
-  const o = document.createElement("option");
-  o.value = t;
-  o.textContent = t;
-  sessionSel.appendChild(o);
-}
 const pauseBtn = document.createElement("button");
 pauseBtn.textContent = "pause";
 const slowBtn = document.createElement("button");
@@ -126,7 +109,7 @@ audioBtn.textContent = "audio off";
 // Info trigger lives in the HUD row so it shares the button styling and alignment.
 const infoBtn = document.createElement("button");
 infoBtn.textContent = "info";
-hud.append(sessionSel, slowBtn, speedLbl, fastBtn, pauseBtn, audioBtn, infoBtn);
+hud.append(slowBtn, speedLbl, fastBtn, pauseBtn, audioBtn, infoBtn);
 document.body.appendChild(hud);
 
 // The whisper cloud engine (action plan §7). Fed the same OSC events as the
@@ -217,13 +200,11 @@ function applySpeed() {
   speedLbl.textContent = `${SPEEDS[speedIdx]}x`;
 }
 
-// Load a capture tag and, once its dump is ready, atomically swap the whole wall
-// to it. On a corpus switch this is deliberately a hard cut: the running corpus
-// freezes (timeline + audio) the instant the switch starts, and the new corpus
-// only appears — from position 0, every monitor and the audio reset — when the
-// load completes and the loader hides. Returns false if a newer switch superseded
-// this one mid-load (its result is discarded; the newer call owns the swap).
-async function loadTag(tag: string, onProgress?: (frac: number) => void): Promise<boolean> {
+// Load the capture dump and, once it is ready, atomically swap the whole wall to
+// it. The single-corpus full-dump only loads once (at boot), but the supersede
+// guard is kept so a stray re-entry can never swap a stale result over a newer
+// load. Returns false if a newer load superseded this one mid-load.
+async function loadTag(onProgress?: (frac: number) => void): Promise<boolean> {
   const gen = ++loadGen;
   // Freeze the running corpus immediately: stop advancing the timeline and cut
   // all audio (in-flight voices + the scheduled cloud tail). No-op on first boot
@@ -231,8 +212,11 @@ async function loadTag(tag: string, onProgress?: (frac: number) => void): Promis
   // wall until the new dump is ready.
   adapter?.pause();
   audio.reset();
+  // Hold the outgoing adapter so we can dispose it (stop its worker + abort the
+  // in-flight ops download) only after the new one has swapped in successfully.
+  const prev = adapter;
 
-  const base = `${CAPTURE_BASE}/${SESSION}/${tag}`;
+  const base = `${CAPTURE_BASE}/${CAPTURE}`;
   const a = new DumpAdapter(base);
 
   // The canonical aggregate layout always mounts ops-consuming panels (rain +
@@ -242,8 +226,12 @@ async function loadTag(tag: string, onProgress?: (frac: number) => void): Promis
     a.load({ ops: needOps }, onProgress),
     fetch(`${base}/manifest.json`).then((r) => (r.ok ? r.json() : null)),
   ]);
-  // A newer switch superseded this one while it loaded — discard silently.
-  if (gen !== loadGen) return false;
+  // A newer switch superseded this one while it loaded — discard silently and
+  // stop this candidate's worker so its download does not keep running.
+  if (gen !== loadGen) {
+    a.dispose();
+    return false;
+  }
 
   // Build fresh panels only now (after the load resolves) and swap atomically, so
   // the wall never shows new empty panels fed by the old timeline mid-load.
@@ -272,14 +260,23 @@ async function loadTag(tag: string, onProgress?: (frac: number) => void): Promis
     { panel: entropy, weight: 9, ops: true },
   ];
   adapter = a;
+  // Swap is committed; tear down the outgoing adapter's worker + download.
+  prev?.dispose();
 
+  // The sidecar schema differs between the old multi-corpus pre-dump and the new
+  // full-dump capture, so read either: seq index, source label, token count.
   const cs = manifest?.corpus_sidecar;
-  if (cs) clock.setSeqMeta(cs.source_seq_idx, cs.source_name, cs.seq_len);
+  if (cs) {
+    const seqIdx = cs.seq_global_index ?? cs.source_seq_idx;
+    const srcName = cs.source ?? cs.source_name;
+    const nTokens = cs.n_tokens ?? cs.seq_len;
+    clock.setSeqMeta(seqIdx, srcName, nTokens);
+  }
 
   // Provenance for the §10 meta label. Prefer the sidecar's human corpus name;
   // fall back to the capture tag so the label never reads empty.
   meta = {
-    corpus: cs?.source_name ?? manifest?.tag ?? tag,
+    corpus: cs?.source ?? cs?.source_name ?? manifest?.tag ?? "capture",
     durationS: manifest?.duration_s ?? manifest?.duration_cap_s ?? 0,
   };
 
@@ -301,18 +298,6 @@ async function loadTag(tag: string, onProgress?: (frac: number) => void): Promis
   return true;
 }
 
-// Corpus switch via the dropdown: show the loader (reused from boot), drive its
-// bar from the worker's byte progress, and hide it once the new corpus is swapped
-// in. A superseded load (applied === false) leaves the loader for the newer one.
-async function switchTag(tag: string): Promise<void> {
-  showLoader("loading op stream");
-  const applied = await loadTag(tag, (p) => setLoadProgress(p, "loading op stream"));
-  if (applied) {
-    setLoadProgress(1, "ready");
-    hideLoader();
-  }
-}
-sessionSel.addEventListener("change", () => void switchTag(sessionSel.value));
 slowBtn.addEventListener("click", () => {
   speedIdx = Math.max(0, speedIdx - 1);
   applySpeed();
@@ -479,7 +464,7 @@ Promise.all([
     .then((r) => (r.ok ? r.arrayBuffer() : null))
     .then((b) => ((residualMeans = b ? parseHelixData(b) : null), corpusTick())),
 ])
-  .then(() => loadTag(TAGS[0], (p) => setLoadProgress(0.15 + p * 0.82, "loading op stream")))
+  .then(() => loadTag((p) => setLoadProgress(0.15 + p * 0.82, "loading op stream")))
   .then(() => {
     setLoadProgress(1, "ready");
     hideLoader();

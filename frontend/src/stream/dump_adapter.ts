@@ -11,12 +11,15 @@ import type { EventStream, OscEvent, OpRec, ResidualRec } from "./types";
 // Pull model: the host owns the rAF loop and calls advance() once per frame.
 // onOsc/onOpRec handlers fire synchronously inside advance().
 //
-// ops.bin.zst is loaded lazily (load({ ops: true })) only when a consuming
-// panel is mounted, since it is ~97 MB compressed / ~180 MB decompressed. The
-// stream is rate-limited at the source to ~1,092 recs/s, so replay is gentle;
-// the cost is the resident buffer, which we keep as the raw decompressed bytes
-// plus a lightweight frame index and walk with a cursor (never exploding all
-// ~8M records into JS objects up front).
+// Streaming ops: the web full-dump's ops.bin.zst is ~1.79 GB compressed /
+// ~3.79 GB decompressed — far too large to hold resident or even allocate as one
+// ArrayBuffer. So decode_worker.ts streams it as whole-frame "slabs" (~4 MB
+// each) under credit-based flow control; this adapter keeps only the slabs near
+// the playback cursor, fires their records as the timeline reaches them, then
+// frees each consumed slab and returns a credit (cmd:"ack") so the worker
+// streams the next. Resident decompressed bytes stay bounded (≈ 96 MB) no matter
+// how long the capture is. Playback is strictly forward (the host never seeks
+// back or loops), which is what lets a one-pass stream suffice.
 //
 // ops.bin framing (written by the Rust tap): a sequence of
 //   [ts_ns: u64 LE][len: u32 LE][payload: len bytes]
@@ -27,65 +30,17 @@ import type { EventStream, OscEvent, OpRec, ResidualRec } from "./types";
 // bert --residual-basis; older captures contain only OpMsg frames (reserved 0).
 const MSG_RESIDUAL = 1;
 
-// The fetch + zstd decompress lives in a shared Web Worker (decode_worker.ts) so
-// the synchronous ~180 MB decompress never blocks the main thread / animation.
-// One worker serves the whole page; jobs are keyed by id and the latest caller
-// wins (DumpAdapter awaits its own job's result). The worker reports download
-// progress and finally returns the parsed OscEvent[] plus the decompressed ops
-// buffer as a Transferable.
-type DonePayload = { events: OscEvent[]; opsBuffer: ArrayBuffer | null };
+// Worker → adapter messages.
 type WorkerResp =
-  | { id: number; type: "progress"; frac: number; stage: string }
-  | { id: number; type: "done"; events: OscEvent[]; opsBuffer: ArrayBuffer | null }
-  | { id: number; type: "error"; message: string };
-
-interface Job {
-  resolve: (p: DonePayload) => void;
-  reject: (e: Error) => void;
-  onProgress?: (frac: number) => void;
-}
-
-let _worker: Worker | null = null;
-let _jobSeq = 0;
-const _jobs = new Map<number, Job>();
-
-function getWorker(): Worker {
-  if (_worker) return _worker;
-  const w = new Worker(new URL("./decode_worker.ts", import.meta.url), { type: "module" });
-  w.onmessage = (e: MessageEvent<WorkerResp>) => {
-    const m = e.data;
-    const job = _jobs.get(m.id);
-    if (!job) return;
-    if (m.type === "progress") {
-      job.onProgress?.(m.frac);
-      return;
-    }
-    _jobs.delete(m.id);
-    if (m.type === "error") job.reject(new Error(m.message));
-    else job.resolve({ events: m.events, opsBuffer: m.opsBuffer });
-  };
-  _worker = w;
-  return w;
-}
-
-// Run one fetch+decompress job in the worker. The progress fraction is absolute
-// (events 0..0.08, ops 0.08..1), matching the bar split the host expects.
-function decodeJob(
-  base: string,
-  ops: boolean,
-  onProgress?: (frac: number) => void,
-): Promise<DonePayload> {
-  const id = ++_jobSeq;
-  const w = getWorker();
-  return new Promise<DonePayload>((resolve, reject) => {
-    _jobs.set(id, { resolve, reject, onProgress });
-    w.postMessage({ id, base, ops });
-  });
-}
+  | { type: "progress"; frac: number; stage: string }
+  | { type: "events"; events: OscEvent[] }
+  | { type: "slab"; buf: ArrayBuffer }
+  | { type: "end" }
+  | { type: "error"; message: string };
 
 interface OpFrame {
   tsNs: number;
-  recOff: number; // byte offset of records[0] within opsRaw
+  recOff: number; // byte offset of records[0] within the slab
   count: number; // valid records in this frame
   base: number; // global op_count of records[0]
 }
@@ -96,6 +51,17 @@ interface ResFrame {
   tsNs: number;
   recOff: number;
   count: number;
+}
+
+// One decompressed slab resident on the main thread, with its frames indexed and
+// two cursors tracking how far playback has consumed each frame type.
+interface Slab {
+  raw: Uint8Array;
+  view: DataView;
+  opFrames: OpFrame[];
+  resFrames: ResFrame[];
+  opCur: number;
+  resCur: number;
 }
 
 export class DumpAdapter implements EventStream {
@@ -111,13 +77,10 @@ export class DumpAdapter implements EventStream {
   private paused = false;
   private baseUrl: string;
 
-  // ops.bin replay state (populated only when load({ ops: true })).
-  private opsRaw?: Uint8Array;
-  private opsView?: DataView;
-  private frames: OpFrame[] = [];
-  private frameIdx = 0;
-  private resFrames: ResFrame[] = [];
-  private resFrameIdx = 0;
+  // ops.bin streaming state (populated only when load({ ops: true })).
+  private worker?: Worker;
+  private slabs: Slab[] = [];
+  private opsEnded = false;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
@@ -150,7 +113,7 @@ export class DumpAdapter implements EventStream {
     return this.playT;
   }
   get done(): boolean {
-    return this.idx >= this.events.length;
+    return this.idx >= this.events.length && this.opsEnded && this.slabs.length === 0;
   }
 
   // The main (lid,vidx) of the first `limit` /bert/whisper events, in fire order.
@@ -167,32 +130,77 @@ export class DumpAdapter implements EventStream {
     return out;
   }
 
-  async load(
+  // Start the worker stream. Resolves early — once the OSC timeline is in and the
+  // first ops slab (or end-of-stream) has landed — so the wall can begin while the
+  // rest of ops.bin keeps streaming in the background. Rejects only if the worker
+  // errors before that first resolve.
+  load(
     opts: { ops?: boolean } = {},
     onProgress?: (frac: number) => void,
   ): Promise<void> {
-    // Fetch + decompress run in the worker (off the main thread); we get back the
-    // parsed events and the decompressed ops buffer (Transferable). Progress is
-    // already absolute (events 0..0.08, ops 0.08..1).
-    const { events, opsBuffer } = await decodeJob(this.baseUrl, !!opts.ops, onProgress);
-    this.events = events;
-    this.t0 = events.length ? events[0].tsNs : 0;
-    this.idx = 0;
-    this.playT = 0;
-    if (opsBuffer) this.indexOps(opsBuffer);
-    onProgress?.(1);
+    return new Promise<void>((resolve, reject) => {
+      const w = new Worker(new URL("./decode_worker.ts", import.meta.url), { type: "module" });
+      this.worker = w;
+      let resolved = false;
+      let gotEvents = false;
+      const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        onProgress?.(1);
+        resolve();
+      };
+      w.onmessage = (e: MessageEvent<WorkerResp>) => {
+        const m = e.data;
+        switch (m.type) {
+          case "progress":
+            onProgress?.(m.frac);
+            break;
+          case "events":
+            this.events = m.events;
+            this.t0 = m.events.length ? m.events[0].tsNs : 0;
+            this.idx = 0;
+            this.playT = 0;
+            gotEvents = true;
+            if (!opts.ops) finish();
+            break;
+          case "slab":
+            this.slabs.push(this.indexSlab(m.buf));
+            if (gotEvents) finish(); // first slab in -> safe to start the wall
+            break;
+          case "end":
+            this.opsEnded = true;
+            finish(); // tiny/empty ops streams resolve here
+            break;
+          case "error":
+            if (!resolved) reject(new Error(m.message));
+            else console.error("[dump] ops stream error:", m.message);
+            break;
+        }
+      };
+      w.onerror = (e) => {
+        if (!resolved) reject(new Error(e.message || "decode worker error"));
+      };
+      w.postMessage({ cmd: "start", base: this.baseUrl, ops: !!opts.ops });
+    });
   }
 
-  // Index the decompressed ops buffer's frames without materializing records.
-  // Cheap (proportional to frame count, reads frame headers only); the heavy
-  // fetch+decompress already ran in the worker. Each frame stores its capture ts
-  // (same clock as the OSC events, so the two share one playback timeline) and
-  // where its records live in the resident buffer.
-  private indexOps(buffer: ArrayBuffer): void {
+  // Stop the worker and release its stream. Called when a corpus switch supersedes
+  // this adapter, so the old 1.79 GB download/decompress is aborted promptly.
+  dispose(): void {
+    if (!this.worker) return;
+    this.worker.postMessage({ cmd: "stop" });
+    this.worker.terminate();
+    this.worker = undefined;
+    this.slabs = [];
+  }
+
+  // Index one decompressed slab's frames (cheap: reads frame headers only). The
+  // worker guarantees slabs are cut on frame boundaries, so no frame straddles
+  // two slabs. Frame offsets are relative to this slab's buffer.
+  private indexSlab(buffer: ArrayBuffer): Slab {
     const raw = new Uint8Array(buffer);
     const dv = new DataView(buffer);
-
-    const frames: OpFrame[] = [];
+    const opFrames: OpFrame[] = [];
     const resFrames: ResFrame[] = [];
     let off = 0;
     while (off + 12 <= raw.length) {
@@ -210,33 +218,26 @@ export class DumpAdapter implements EventStream {
         // MSG_OP (0) or any unknown type defaults to the op layout, matching
         // older captures whose reserved field was always 0.
         const capacity = Math.floor((len - 16) / 24);
-        frames.push({ tsNs, recOff: off + 16, count: Math.min(declared, capacity), base });
+        opFrames.push({ tsNs, recOff: off + 16, count: Math.min(declared, capacity), base });
       }
       off += len;
     }
-    frames.sort((a, b) => a.tsNs - b.tsNs);
-    resFrames.sort((a, b) => a.tsNs - b.tsNs);
-    this.opsRaw = raw;
-    this.opsView = dv;
-    this.frames = frames;
-    this.frameIdx = 0;
-    this.resFrames = resFrames;
-    this.resFrameIdx = 0;
+    return { raw, view: dv, opFrames, resFrames, opCur: 0, resCur: 0 };
   }
 
-  // Decode one 24-byte OpRec at byte offset p, reconstructing the record's
-  // global op_count from the frame base (op_count_lo is its low 32 bits).
-  private readOp(p: number, base: number): OpRec {
-    const dv = this.opsView!;
+  // Decode one 24-byte OpRec at byte offset p within a slab, reconstructing the
+  // record's global op_count from the frame base (op_count_lo is its low 32 bits).
+  private readOp(s: Slab, p: number, base: number): OpRec {
+    const dv = s.view;
     const lo = dv.getUint32(p, true);
     let opCount = Math.floor(base / 4294967296) * 4294967296 + lo;
     if (opCount < base) opCount += 4294967296;
     return {
       opCount,
-      opType: this.opsRaw![p + 4],
-      layer: this.opsRaw![p + 5],
-      head: this.opsRaw![p + 6],
-      flags: this.opsRaw![p + 7],
+      opType: s.raw[p + 4],
+      layer: s.raw[p + 5],
+      head: s.raw[p + 6],
+      flags: s.raw[p + 7],
       qPos: dv.getUint16(p + 8, true),
       kPos: dv.getUint16(p + 10, true),
       a: dv.getFloat32(p + 12, true),
@@ -245,13 +246,13 @@ export class DumpAdapter implements EventStream {
     };
   }
 
-  // Decode one 16-byte ResidualRec at byte offset p.
+  // Decode one 16-byte ResidualRec at byte offset p within a slab.
   //   layer u8 | strand u8 | q_pos u16 | c0 f32 | c1 f32 | c2 f32
-  private readResidual(p: number): ResidualRec {
-    const dv = this.opsView!;
+  private readResidual(s: Slab, p: number): ResidualRec {
+    const dv = s.view;
     return {
-      layer: this.opsRaw![p],
-      strand: this.opsRaw![p + 1],
+      layer: s.raw[p],
+      strand: s.raw[p + 1],
       qPos: dv.getUint16(p + 2, true),
       c0: dv.getFloat32(p + 4, true),
       c1: dv.getFloat32(p + 8, true),
@@ -266,34 +267,56 @@ export class DumpAdapter implements EventStream {
     const pdt = realDt * this.speed;
     this.playT += pdt;
     const cutoff = this.t0 + this.playT * 1e9;
+
+    // OSC first, matching the C++ panels that process axis events before the op
+    // batch.
     while (this.idx < this.events.length && this.events[this.idx].tsNs <= cutoff) {
       const ev = this.events[this.idx++];
       for (const h of this.oscHandlers) h(ev);
     }
-    // Fire op frames on the same timeline (OSC first, matching the C++ panels
-    // that process axis events before the op batch).
-    while (this.frameIdx < this.frames.length && this.frames[this.frameIdx].tsNs <= cutoff) {
-      const fr = this.frames[this.frameIdx++];
-      let p = fr.recOff;
-      for (let i = 0; i < fr.count; i++) {
-        const rec = this.readOp(p, fr.base);
-        for (const h of this.opHandlers) h(rec);
-        p += 24;
+
+    // Op records across the resident slabs, in stream order (slabs and the frames
+    // within them are ts-ascending). Stop at the first slab still holding a future
+    // op frame — all later slabs are later still.
+    for (const s of this.slabs) {
+      while (s.opCur < s.opFrames.length && s.opFrames[s.opCur].tsNs <= cutoff) {
+        const fr = s.opFrames[s.opCur++];
+        let p = fr.recOff;
+        for (let i = 0; i < fr.count; i++) {
+          const rec = this.readOp(s, p, fr.base);
+          for (const h of this.opHandlers) h(rec);
+          p += 24;
+        }
       }
+      if (s.opCur < s.opFrames.length) break;
     }
-    // Residual frames share the same playback timeline; fire after op records.
+
+    // Residual records: same one-pass-per-cutoff walk, fired after all due ops to
+    // preserve the original (all OSC, then all ops, then all residual) ordering.
+    for (const s of this.slabs) {
+      while (s.resCur < s.resFrames.length && s.resFrames[s.resCur].tsNs <= cutoff) {
+        const fr = s.resFrames[s.resCur++];
+        let p = fr.recOff;
+        for (let i = 0; i < fr.count; i++) {
+          const rec = this.readResidual(s, p);
+          for (const h of this.resHandlers) h(rec);
+          p += 16;
+        }
+      }
+      if (s.resCur < s.resFrames.length) break;
+    }
+
+    // Drop fully-consumed front slabs and return a credit per slab so the worker
+    // streams more. A slab is done only when both cursors are exhausted.
     while (
-      this.resFrameIdx < this.resFrames.length &&
-      this.resFrames[this.resFrameIdx].tsNs <= cutoff
+      this.slabs.length > 0 &&
+      this.slabs[0].opCur >= this.slabs[0].opFrames.length &&
+      this.slabs[0].resCur >= this.slabs[0].resFrames.length
     ) {
-      const fr = this.resFrames[this.resFrameIdx++];
-      let p = fr.recOff;
-      for (let i = 0; i < fr.count; i++) {
-        const rec = this.readResidual(p);
-        for (const h of this.resHandlers) h(rec);
-        p += 16;
-      }
+      this.slabs.shift();
+      this.worker?.postMessage({ cmd: "ack" });
     }
+
     return pdt;
   }
 }
