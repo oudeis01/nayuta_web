@@ -1,0 +1,45 @@
+name: deploy-pages
+
+# Push-to-deploy for the Cloudflare Pages site. This reuses the existing
+# frontend/scripts/deploy_pages.sh (build -> prune dist/captures+audio ->
+# wrangler pages deploy), so the R2 split and 25 MiB pruning live in one place.
+#
+# Required repo secrets (Settings > Secrets and variables > Actions):
+#   CLOUDFLARE_API_TOKEN   token with "Cloudflare Pages: Edit" permission
+#   CLOUDFLARE_ACCOUNT_ID  the account that owns the Pages project
+#   CF_PAGES_PROJECT       existing Pages project name (currently: nayuta)
+#   VITE_CAPTURE_BASE      R2 capture base URL, baked into the build
+#   VITE_AUDIO_BASE        R2 audio base URL, baked into the build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+  workflow_dispatch: {}
+
+# One deploy at a time; a newer push supersedes an in-flight run.
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install wrangler
+        run: npm install -g wrangler
+
+      - name: Build and deploy
+        working-directory: frontend
+        env:
+          VITE_CAPTURE_BASE: ${{ secrets.VITE_CAPTURE_BASE }}
+          VITE_AUDIO_BASE: ${{ secrets.VITE_AUDIO_BASE }}
+          CF_PAGES_PROJECT: ${{ secrets.CF_PAGES_PROJECT }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: ./scripts/deploy_pages.sh
