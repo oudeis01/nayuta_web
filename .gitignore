@@ -1,0 +1,26 @@
+# --- Rust release builds (tap = capture/streaming adapter) ---
+tap/target/
+
+# --- Run output (captured frames/ops) ---
+captures/
+
+# --- opus re-encode output (~196 MB; regenerate with audio_pipeline/encode_opus.sh) ---
+audio_pipeline/opus/
+
+# --- One-off operational scripts for the rented GPU box (kept local, never committed) ---
+audio_pipeline/mi300x_accent/pull_wav_rsync.sh
+audio_pipeline/mi300x_accent/pull_wav_tar.sh
+audio_pipeline/mi300x_accent/encode_opus_accent.sh
+
+# --- Wrangler / Cloudflare deploy cache (never committed) ---
+.wrangler/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- Logs / OS ---
+*.log
+.DS_Store
